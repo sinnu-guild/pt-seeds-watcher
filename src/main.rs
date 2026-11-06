@@ -1,11 +1,13 @@
 mod capture;
 
 fn main() {
-    for w in capture::list_windows() {
-        println!("{:>6}x{:<6} {}", w.width, w.height, w.title);
-    }
-    match capture::find_window("Play Together") {
-        Some(w) => println!("found: {}", w.title),
-        None => println!("game window not found"),
+    let Some(w) = capture::find_window("Play Together") else {
+        eprintln!("game window not found");
+        return;
+    };
+    println!("found: {} ({}x{})", w.title, w.width, w.height);
+    match capture::capture(w.hwnd) {
+        Ok(f) => println!("captured {}x{}, {} bytes", f.width, f.height, f.rgba.len()),
+        Err(e) => eprintln!("capture failed: {e}"),
     }
 }

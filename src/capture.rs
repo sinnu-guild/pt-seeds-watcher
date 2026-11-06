@@ -80,6 +80,23 @@ extern "system" {
     fn MessageBeep(kind: u32) -> BOOL;
 }
 
+#[link(name = "gdi32")]
+extern "system" {
+    fn CreateCompatibleDC(hdc: HDC) -> HDC;
+    fn CreateCompatibleBitmap(hdc: HDC, width: i32, height: i32) -> HGDIOBJ;
+    fn SelectObject(hdc: HDC, obj: HGDIOBJ) -> HGDIOBJ;
+    fn GetDIBits(
+        hdc: HDC,
+        bitmap: HGDIOBJ,
+        start: u32,
+        lines: u32,
+        bits: *mut c_void,
+        info: *mut BITMAPINFO,
+        usage: u32,
+    ) -> i32;
+    fn DeleteObject(obj: HGDIOBJ) -> BOOL;
+    fn DeleteDC(hdc: HDC) -> BOOL;
+}
 
 #[link(name = "dwmapi")]
 extern "system" {
@@ -95,6 +112,12 @@ const DWMWA_CLOAKED: u32 = 14;
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: HANDLE = -4;
 const MB_ICONEXCLAMATION: u32 = 0x30;
 
+/// A captured picture of the window's client area, as RGBA bytes.
+pub struct Frame {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
 
 pub struct WindowInfo {
     pub hwnd: isize,
@@ -184,5 +207,83 @@ pub fn find_window(wanted: &str) -> Option<WindowInfo> {
         .filter(|(rank, _)| *rank > 0)
         .max_by_key(|(rank, w)| (*rank, w.width as i64 * w.height as i64))
         .map(|(_, w)| w)
+}
+
+/// Captures the window's client area (no title bar or borders).
+pub fn capture(hwnd: isize) -> Result<Frame, String> {
+    unsafe {
+        if IsIconic(hwnd) != 0 {
+            return Err("the game window is minimized; Windows doesn't draw minimized windows, \
+                        so leave it open behind other windows or on another desktop"
+                .into());
+        }
+        let mut rect = RECT::default();
+        if GetClientRect(hwnd, &mut rect) == 0 {
+            return Err("couldn't read the game window's size (did it just close?)".into());
+        }
+        let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
+        if w <= 0 || h <= 0 {
+            return Err(format!("the game window has no visible area ({w}x{h})"));
+        }
+
+        let screen_dc = GetDC(0);
+        let mem_dc = CreateCompatibleDC(screen_dc);
+        let bitmap = CreateCompatibleBitmap(screen_dc, w, h);
+        let previous = SelectObject(mem_dc, bitmap);
+
+        let printed = PrintWindow(hwnd, mem_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
+
+        // GetDIBits wants the bitmap not selected into any DC.
+        SelectObject(mem_dc, previous);
+
+        let mut info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h, // negative = rows from top to bottom
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [0],
+        };
+        let mut bgra = vec![0u8; w as usize * h as usize * 4];
+        let lines = GetDIBits(
+            mem_dc,
+            bitmap,
+            0,
+            h as u32,
+            bgra.as_mut_ptr() as *mut c_void,
+            &mut info,
+            DIB_RGB_COLORS,
+        );
+
+        DeleteObject(bitmap);
+        DeleteDC(mem_dc);
+        ReleaseDC(0, screen_dc);
+
+        if printed == 0 {
+            return Err("Windows refused to draw the game window (PrintWindow failed)".into());
+        }
+        if lines == 0 {
+            return Err("couldn't read the captured pixels (GetDIBits failed)".into());
+        }
+
+        // BGRA -> RGBA, fully opaque.
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+            px[3] = 255;
+        }
+        Ok(Frame {
+            width: w as u32,
+            height: h as u32,
+            rgba: bgra,
+        })
+    }
 }
 

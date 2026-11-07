@@ -1,4 +1,5 @@
 mod capture;
+mod matcher;
 
 fn main() {
     capture::init_dpi();

@@ -74,3 +74,34 @@ impl Gray {
     }
 }
 
+/// Summed-area tables so any rectangle's sum and sum of squares is O(1).
+struct Integral {
+    stride: usize,
+    sum: Vec<f64>,
+    sq: Vec<f64>,
+}
+
+impl Integral {
+    fn new(g: &Gray) -> Integral {
+        let stride = g.w + 1;
+        let mut sum = vec![0f64; stride * (g.h + 1)];
+        let mut sq = vec![0f64; stride * (g.h + 1)];
+        for y in 0..g.h {
+            let (mut row_sum, mut row_sq) = (0f64, 0f64);
+            for x in 0..g.w {
+                let v = g.px[y * g.w + x] as f64;
+                row_sum += v;
+                row_sq += v * v;
+                sum[(y + 1) * stride + x + 1] = sum[y * stride + x + 1] + row_sum;
+                sq[(y + 1) * stride + x + 1] = sq[y * stride + x + 1] + row_sq;
+            }
+        }
+        Integral { stride, sum, sq }
+    }
+
+    fn rect(&self, table: &[f64], x: usize, y: usize, w: usize, h: usize) -> f64 {
+        let s = self.stride;
+        table[(y + h) * s + x + w] - table[y * s + x + w] - table[(y + h) * s + x] + table[y * s + x]
+    }
+}
+

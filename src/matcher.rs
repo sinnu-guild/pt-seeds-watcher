@@ -105,3 +105,91 @@ impl Integral {
     }
 }
 
+/// A template at one scale, with its mean removed ahead of time.
+struct Level {
+    w: usize,
+    h: usize,
+    zero_mean: Vec<f32>,
+    norm: f32,
+}
+
+impl Level {
+    fn new(g: &Gray) -> Option<Level> {
+        let n = g.px.len() as f32;
+        let mean = g.px.iter().sum::<f32>() / n;
+        let zero_mean: Vec<f32> = g.px.iter().map(|v| v - mean).collect();
+        let norm = zero_mean.iter().map(|v| v * v).sum::<f32>().sqrt();
+        // A template with (almost) no detail can't be matched meaningfully.
+        if norm < (n.sqrt() * 2.0) {
+            return None;
+        }
+        Some(Level {
+            w: g.w,
+            h: g.h,
+            zero_mean,
+            norm,
+        })
+    }
+}
+
+/// A seed picture, ready to be searched for.
+pub struct Template {
+    pub name: String,
+    pub threshold: f32,
+    pub w: usize,
+    pub h: usize,
+    factor: usize,
+    full: Level,
+    coarse: Level,
+}
+
+impl Template {
+    pub fn new(name: &str, g: Gray, threshold: f32) -> Result<Template, String> {
+        if g.w < 8 || g.h < 8 {
+            return Err(format!(
+                "the picture for '{name}' is only {}x{} pixels; crop a bigger area around the seed",
+                g.w, g.h
+            ));
+        }
+        // Shrink so the coarse template is roughly 16px on its short side.
+        let factor = (g.w.min(g.h) / 16).clamp(1, 4);
+        let flat = || format!("the picture for '{name}' is almost a single flat colour; crop an area with more detail");
+        let full = Level::new(&g).ok_or_else(flat)?;
+        let coarse = Level::new(&g.downscale(factor)).ok_or_else(flat)?;
+        Ok(Template {
+            name: name.to_string(),
+            threshold,
+            w: g.w,
+            h: g.h,
+            factor,
+            full,
+            coarse,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Match {
+    pub score: f32,
+    pub x: usize,
+    pub y: usize,
+}
+
+fn zncc_at(img: &Gray, ii: &Integral, t: &Level, x: usize, y: usize) -> f32 {
+    let n = (t.w * t.h) as f64;
+    let s = ii.rect(&ii.sum, x, y, t.w, t.h);
+    let q = ii.rect(&ii.sq, x, y, t.w, t.h);
+    let spread = q - s * s / n; // n * variance of the image patch
+    if spread <= n {
+        return 0.0; // patch is basically flat (std dev < 1 brightness level)
+    }
+    let mut num = 0f32;
+    for j in 0..t.h {
+        let start = (y + j) * img.w + x;
+        let row = &img.px[start..start + t.w];
+        let trow = &t.zero_mean[j * t.w..(j + 1) * t.w];
+        num += row.iter().zip(trow).map(|(a, b)| a * b).sum::<f32>();
+    }
+    (num as f64 / (t.norm as f64 * spread.sqrt())) as f32
+}
+

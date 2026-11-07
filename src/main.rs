@@ -1,6 +1,8 @@
 mod capture;
 
 fn main() {
+    capture::init_dpi();
+
     let Some(w) = capture::find_window("Play Together") else {
         eprintln!("game window not found");
         return;

@@ -129,6 +129,12 @@ pub struct WindowInfo {
     pub height: i32,
 }
 
+/// Makes window sizes come back in real pixels instead of DPI-scaled ones.
+pub fn init_dpi() {
+    unsafe {
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+}
 
 unsafe extern "system" fn collect_window(hwnd: HWND, lparam: isize) -> BOOL {
     let out = &mut *(lparam as *mut Vec<WindowInfo>);

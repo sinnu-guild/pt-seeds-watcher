@@ -285,3 +285,97 @@ fn scan_best(img: &Gray, ii: &Integral, t: &Level, keep: usize) -> Vec<Match> {
     picked
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deterministic pseudo-random noise so tests don't need a crate.
+    fn noise(w: usize, h: usize, seed: u64) -> Gray {
+        let mut s = seed;
+        let px = (0..w * h)
+            .map(|_| {
+                s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((s >> 33) % 256) as f32
+            })
+            .collect();
+        Gray { w, h, px }
+    }
+
+    fn paste(dst: &mut Gray, src: &Gray, x: usize, y: usize, brightness: f32) {
+        for j in 0..src.h {
+            for i in 0..src.w {
+                dst.px[(y + j) * dst.w + x + i] = (src.px[j * src.w + i] * 0.8 + brightness).min(255.0);
+            }
+        }
+    }
+
+    fn blocky_icon(w: usize, h: usize) -> Gray {
+        // Smooth-ish shapes like a real icon, so shrinking keeps its structure.
+        let px = (0..w * h)
+            .map(|i| {
+                let (x, y) = ((i % w) as f32, (i / w) as f32);
+                let d = ((x - w as f32 / 2.0).powi(2) + (y - h as f32 / 2.0).powi(2)).sqrt();
+                if d < w as f32 / 3.0 {
+                    220.0
+                } else if x < w as f32 / 4.0 {
+                    90.0
+                } else {
+                    30.0 + y * 2.0
+                }
+            })
+            .collect();
+        Gray { w, h, px }
+    }
+
+    #[test]
+    fn finds_icon_in_screenshot_with_brightness_change() {
+        let icon = blocky_icon(64, 56);
+        let mut shot = noise(900, 600, 7);
+        paste(&mut shot, &icon, 413, 257, 20.0);
+        let t = Template::new("Test Seed", icon, 0.85).unwrap();
+        assert_eq!(t.factor, 3);
+        let m = Searcher::new(shot).find(&t).unwrap();
+        assert!(m.score > 0.95, "score {}", m.score);
+        assert_eq!((m.x, m.y), (413, 257));
+    }
+
+    #[test]
+    fn low_score_when_icon_absent() {
+        let icon = blocky_icon(48, 48);
+        let shot = noise(800, 500, 99);
+        let t = Template::new("Missing", icon, 0.85).unwrap();
+        let m = Searcher::new(shot).find(&t).unwrap();
+        assert!(m.score < 0.5, "score {}", m.score);
+    }
+
+    #[test]
+    fn small_icon_uses_full_scale() {
+        let icon = blocky_icon(20, 20);
+        let mut shot = noise(300, 200, 3);
+        paste(&mut shot, &icon, 5, 170, 0.0);
+        let t = Template::new("Tiny", icon, 0.85).unwrap();
+        let m = Searcher::new(shot).find(&t).unwrap();
+        assert_eq!((m.x, m.y), (5, 170));
+    }
+
+    #[test]
+    fn rejects_flat_and_tiny_pictures() {
+        let flat = Gray { w: 30, h: 30, px: vec![128.0; 900] };
+        assert!(Template::new("Flat", flat, 0.85).is_err());
+        assert!(Template::new("Tiny", noise(5, 5, 1), 0.85).is_err());
+    }
+
+    #[test]
+    fn template_bigger_than_image() {
+        let t = Template::new("Big", blocky_icon(64, 64), 0.85).unwrap();
+        assert!(Searcher::new(noise(40, 40, 1)).find(&t).is_none());
+    }
+
+    #[test]
+    fn crop_clips_to_edges() {
+        let g = noise(10, 10, 1);
+        let c = g.crop(8, 8, 5, 5);
+        assert_eq!((c.w, c.h), (2, 2));
+        assert_eq!(c.px[0], g.px[88]);
+    }
+}

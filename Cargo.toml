@@ -5,6 +5,8 @@ edition = "2021"
 description = "Watches the Play Together seed shop on screen and alerts you when chosen seeds are in stock. Read-only: it never clicks or buys."
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 # Image matching is slow without optimisations, so even debug builds of
 # dependencies and this crate get some.

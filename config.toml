@@ -1,0 +1,52 @@
+# pt-seeds-watcher settings.
+# Lines starting with # are comments. Restart the watcher after editing.
+
+# The game window's title (case and spaces don't matter).
+# If the watcher can't find the game, run:  cargo run --release -- windows
+window_title = "Play Together"
+
+# How often to look at the shop, in seconds. The shop refreshes every 5 minutes,
+# so 20 seconds catches every refresh quickly while using almost no CPU.
+check_every_secs = 20
+
+# How closely the seed picture must match (0 to 1). 0.85 is a good start.
+# `test` prints each seed's score: raise this if you get false alerts,
+# lower it a little if a seed that's clearly there isn't detected.
+threshold = 0.85
+
+# After an alert, the seed must be gone for this many checks in a row before
+# it can alert again, so one restock gives you one alert, not one per check.
+rearm_after_misses = 3
+
+# Optional: only search part of the game window, as [x, y, width, height] in
+# pixels. Read the numbers off snapshot.png (Paint shows the cursor position
+# at the bottom left). Makes checks faster and avoids matching things outside
+# the shop. Leave commented out to search the whole window.
+# region = [400, 150, 1100, 750]
+
+# Folder with one picture per seed, cropped from snapshot.png.
+templates_dir = "templates"
+
+[alerts]
+desktop = true          # Windows notification
+sound = true            # Windows alert sound
+# Phone alerts with the free ntfy app: subscribe to a hard-to-guess topic in
+# the app and put the same name here. Leave empty to turn off.
+ntfy_topic = ""
+ntfy_server = "https://ntfy.sh"
+# Paste a Discord channel webhook URL here to get alerts in Discord.
+discord_webhook = ""
+# Alert once if the watcher can't see the seed shop for 3 checks in a row
+# (game closed, window minimized, etc.).
+notify_when_window_lost = true
+
+# One [[seeds]] block per seed to watch for. The picture defaults to
+# templates/<name>.png. Remove the # from the lines below and change them.
+#
+# [[seeds]]
+# name = "Golden Corn"
+#
+# [[seeds]]
+# name = "Starfruit"
+# template = "starfruit-icon.png"   # use a different file name
+# threshold = 0.9                   # stricter match for this seed only

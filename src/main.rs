@@ -1,4 +1,5 @@
 mod capture;
+mod config;
 mod matcher;
 
 fn main() {

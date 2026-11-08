@@ -5,3 +5,11 @@ edition = "2021"
 description = "Watches the Play Together seed shop on screen and alerts you when chosen seeds are in stock. Read-only: it never clicks or buys."
 
 [dependencies]
+
+# Image matching is slow without optimisations, so even debug builds of
+# dependencies and this crate get some.
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+opt-level = 3

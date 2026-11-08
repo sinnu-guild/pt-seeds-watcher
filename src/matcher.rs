@@ -193,3 +193,95 @@ fn zncc_at(img: &Gray, ii: &Integral, t: &Level, x: usize, y: usize) -> f32 {
     (num as f64 / (t.norm as f64 * spread.sqrt())) as f32
 }
 
+/// One screenshot prepared for searching. Shrunk copies are made on demand
+/// and reused across seeds.
+pub struct Searcher {
+    full: Gray,
+    full_ii: Integral,
+    shrunk: HashMap<usize, (Gray, Integral)>,
+}
+
+impl Searcher {
+    pub fn new(img: Gray) -> Searcher {
+        let full_ii = Integral::new(&img);
+        Searcher {
+            full: img,
+            full_ii,
+            shrunk: HashMap::new(),
+        }
+    }
+
+    /// Best match for the template anywhere in the image (position in full-size pixels).
+    pub fn find(&mut self, t: &Template) -> Option<Match> {
+        let Searcher {
+            full,
+            full_ii,
+            shrunk,
+        } = self;
+        if t.w > full.w || t.h > full.h {
+            return None;
+        }
+        let f = t.factor;
+        if f == 1 {
+            return scan_best(full, full_ii, &t.full, 1).into_iter().next();
+        }
+
+        let (small, small_ii) = shrunk.entry(f).or_insert_with(|| {
+            let g = full.downscale(f);
+            let ii = Integral::new(&g);
+            (g, ii)
+        });
+        if t.coarse.w > small.w || t.coarse.h > small.h {
+            return None;
+        }
+
+        // Check the few best coarse spots again at full size, nudging around each.
+        let mut best: Option<Match> = None;
+        for cand in scan_best(small, small_ii, &t.coarse, 5) {
+            let (cx, cy) = (cand.x * f, cand.y * f);
+            let reach = 2 * f;
+            let (x_hi, y_hi) = ((cx + reach).min(full.w - t.w), (cy + reach).min(full.h - t.h));
+            for y in cy.saturating_sub(reach)..=y_hi {
+                for x in cx.saturating_sub(reach)..=x_hi {
+                    let score = zncc_at(full, full_ii, &t.full, x, y);
+                    if best.map_or(true, |b| score > b.score) {
+                        best = Some(Match { score, x, y });
+                    }
+                }
+            }
+        }
+        best
+    }
+}
+
+/// Scans every position and returns up to `keep` high-scoring spots that
+/// aren't on top of each other, best first.
+fn scan_best(img: &Gray, ii: &Integral, t: &Level, keep: usize) -> Vec<Match> {
+    let mut all = Vec::with_capacity((img.w - t.w + 1) * (img.h - t.h + 1));
+    for y in 0..=img.h - t.h {
+        for x in 0..=img.w - t.w {
+            all.push(Match {
+                score: zncc_at(img, ii, t, x, y),
+                x,
+                y,
+            });
+        }
+    }
+    all.sort_by(|a, b| b.score.total_cmp(&a.score));
+
+    let gap = (t.w.min(t.h) / 2).max(1);
+    let mut picked: Vec<Match> = Vec::with_capacity(keep);
+    for m in all {
+        if picked.len() >= keep {
+            break;
+        }
+        if picked
+            .iter()
+            .all(|p| p.x.abs_diff(m.x) > gap || p.y.abs_diff(m.y) > gap)
+        {
+            picked.push(m);
+        }
+    }
+    picked
+}
+

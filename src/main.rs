@@ -63,6 +63,7 @@ fn main() {
     } else {
         load_config(&config_path).and_then(|(cfg, dir)| match command.as_str() {
             "snapshot" => cmd_snapshot(&cfg, &dir),
+            "test" => cmd_test(&cfg, &dir),
             other => Err(format!("unknown command '{other}'. Run with --help.")),
         })
     };
@@ -191,4 +192,69 @@ fn cmd_snapshot(cfg: &Config, dir: &Path) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+fn cmd_test(cfg: &Config, dir: &Path) -> Result<(), String> {
+    let templates = load_templates(cfg, dir)?;
+    let (frame, title) = grab(cfg)?;
+    let (gray, ox, oy) = search_area(cfg, &frame);
+    println!("Captured \"{title}\" ({}x{})", frame.width, frame.height);
+    if looks_blank(&gray) {
+        println!("WARNING: {BLANK_HELP}.");
+    }
+
+    let started = Instant::now();
+    let mut searcher = Searcher::new(gray);
+    let results: Vec<Option<Match>> = templates.iter().map(|t| searcher.find(t)).collect();
+    println!("Checked {} seed(s) in {} ms\n", templates.len(), started.elapsed().as_millis());
+
+    let mut img = frame_to_image(frame)?;
+    if let Some([x, y, w, h]) = cfg.region {
+        draw_box(&mut img, x, y, w, h, Rgba([60, 140, 255, 255]));
+    }
+    for (t, m) in templates.iter().zip(&results) {
+        match m {
+            Some(m) => {
+                let hit = m.score >= t.threshold;
+                println!(
+                    "  {:<24} score {:.3} (needs {:.2}) at {},{}  {}",
+                    t.name,
+                    m.score,
+                    t.threshold,
+                    m.x + ox,
+                    m.y + oy,
+                    if hit { "<- FOUND" } else { "" }
+                );
+                let color = if hit { Rgba([0, 220, 0, 255]) } else { Rgba([255, 40, 40, 255]) };
+                draw_box(&mut img, (m.x + ox) as u32, (m.y + oy) as u32, t.w as u32, t.h as u32, color);
+            }
+            None => println!("  {:<24} picture is bigger than the search area", t.name),
+        }
+    }
+    let path = dir.join("debug.png");
+    img.save(&path).map_err(|e| format!("couldn't save {}: {e}", path.display()))?;
+    println!(
+        "\nSaved {}: green box = found, red box = best guess that wasn't good enough, blue = region.",
+        path.display()
+    );
+    Ok(())
+}
+
+fn draw_box(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: Rgba<u8>) {
+    let (iw, ih) = img.dimensions();
+    let mut put = |px: u32, py: u32| {
+        if px < iw && py < ih {
+            img.put_pixel(px, py, color);
+        }
+    };
+    for t in 0..2 {
+        for i in x..x.saturating_add(w) {
+            put(i, y + t);
+            put(i, (y + h).saturating_sub(1 + t));
+        }
+        for j in y..y.saturating_add(h) {
+            put(x + t, j);
+            put((x + w).saturating_sub(1 + t), j);
+        }
+    }
 }

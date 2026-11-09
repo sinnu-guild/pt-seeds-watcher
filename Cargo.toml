@@ -7,6 +7,7 @@ description = "Watches the Play Together seed shop on screen and alerts you when
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Image matching is slow without optimisations, so even debug builds of
 # dependencies and this crate get some.

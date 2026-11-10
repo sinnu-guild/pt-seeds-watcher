@@ -103,6 +103,10 @@ extern "system" {
     fn DwmGetWindowAttribute(hwnd: HWND, attr: u32, value: *mut c_void, size: u32) -> i32;
 }
 
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetLocalTime(time: *mut SYSTEMTIME);
+}
 
 const PW_CLIENTONLY: u32 = 0x1;
 const PW_RENDERFULLCONTENT: u32 = 0x2;
@@ -293,3 +297,16 @@ pub fn capture(hwnd: isize) -> Result<Frame, String> {
     }
 }
 
+/// Local time as HH:MM:SS, for log lines.
+pub fn now_hms() -> String {
+    let mut t = SYSTEMTIME::default();
+    unsafe { GetLocalTime(&mut t) };
+    format!("{:02}:{:02}:{:02}", t.wHour, t.wMinute, t.wSecond)
+}
+
+/// Plays the Windows "exclamation" sound.
+pub fn beep() {
+    unsafe {
+        MessageBeep(MB_ICONEXCLAMATION);
+    }
+}

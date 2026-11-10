@@ -8,6 +8,7 @@ compile_error!("pt-seeds-watcher only runs on Windows. Build it from PowerShell,
 mod capture;
 mod config;
 mod matcher;
+mod notify;
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -64,6 +65,7 @@ fn main() {
         load_config(&config_path).and_then(|(cfg, dir)| match command.as_str() {
             "snapshot" => cmd_snapshot(&cfg, &dir),
             "test" => cmd_test(&cfg, &dir),
+            "test-alert" => cmd_test_alert(&cfg),
             other => Err(format!("unknown command '{other}'. Run with --help.")),
         })
     };
@@ -237,6 +239,13 @@ fn cmd_test(cfg: &Config, dir: &Path) -> Result<(), String> {
         "\nSaved {}: green box = found, red box = best guess that wasn't good enough, blue = region.",
         path.display()
     );
+    Ok(())
+}
+
+fn cmd_test_alert(cfg: &Config) -> Result<(), String> {
+    println!("Sending a test alert...");
+    notify::send(&cfg.alerts, ALERT_TITLE, "Test alert from pt-seeds-watcher. Alerts are working!");
+    println!("Done. Any channel that failed is listed above.");
     Ok(())
 }
 

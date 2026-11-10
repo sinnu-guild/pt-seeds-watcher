@@ -63,6 +63,7 @@ fn main() {
         cmd_windows(&config_path)
     } else {
         load_config(&config_path).and_then(|(cfg, dir)| match command.as_str() {
+            "watch" => cmd_watch(&cfg, &dir),
             "snapshot" => cmd_snapshot(&cfg, &dir),
             "test" => cmd_test(&cfg, &dir),
             "test-alert" => cmd_test_alert(&cfg),
@@ -247,6 +248,88 @@ fn cmd_test_alert(cfg: &Config) -> Result<(), String> {
     notify::send(&cfg.alerts, ALERT_TITLE, "Test alert from pt-seeds-watcher. Alerts are working!");
     println!("Done. Any channel that failed is listed above.");
     Ok(())
+}
+
+fn cmd_watch(cfg: &Config, dir: &Path) -> Result<(), String> {
+    let templates = load_templates(cfg, dir)?;
+    let interval = Duration::from_secs(cfg.check_every_secs.max(5));
+    let names: Vec<&str> = templates.iter().map(|t| t.name.as_str()).collect();
+    println!(
+        "Watching for: {}\nChecking every {}s. Press Ctrl+C to stop.\n",
+        names.join(", "),
+        interval.as_secs()
+    );
+
+    // Per seed: (already alerted for this stock, checks in a row without it).
+    let mut state: Vec<(bool, u32)> = vec![(false, 0); templates.len()];
+    let mut failures = 0u32;
+    let mut lost_alert_sent = false;
+
+    loop {
+        let started = Instant::now();
+        let checked = grab(cfg).and_then(|(frame, _)| {
+            let (gray, _, _) = search_area(cfg, &frame);
+            if looks_blank(&gray) {
+                Err(BLANK_HELP.to_string())
+            } else {
+                Ok(gray)
+            }
+        });
+
+        match checked {
+            Ok(gray) => {
+                if lost_alert_sent {
+                    println!("[{}] The seed shop is visible again.", capture::now_hms());
+                }
+                failures = 0;
+                lost_alert_sent = false;
+
+                let mut searcher = Searcher::new(gray);
+                let mut parts = Vec::new();
+                let mut newly_found = Vec::new();
+                for (t, st) in templates.iter().zip(state.iter_mut()) {
+                    let score = searcher.find(t).map_or(0.0, |m| m.score);
+                    let hit = score >= t.threshold;
+                    parts.push(format!("{} {:.2}{}", t.name, score, if hit { " FOUND" } else { "" }));
+                    if hit {
+                        st.1 = 0;
+                        if !st.0 {
+                            st.0 = true;
+                            newly_found.push(t.name.clone());
+                        }
+                    } else {
+                        st.1 += 1;
+                        if st.0 && st.1 >= cfg.rearm_after_misses.max(1) {
+                            st.0 = false;
+                        }
+                    }
+                }
+                println!("[{}] {}", capture::now_hms(), parts.join(" | "));
+
+                if !newly_found.is_empty() {
+                    let body = format!("In stock now: {}", newly_found.join(", "));
+                    println!("    >>> ALERT: {body}");
+                    notify::send(&cfg.alerts, ALERT_TITLE, &body);
+                }
+            }
+            Err(e) => {
+                failures += 1;
+                println!("[{}] Can't check: {e}", capture::now_hms());
+                if failures >= 3 && !lost_alert_sent && cfg.alerts.notify_when_window_lost {
+                    notify::send(
+                        &cfg.alerts,
+                        "Seed watcher needs attention",
+                        &format!("It can't see the seed shop: {e}"),
+                    );
+                    lost_alert_sent = true;
+                }
+            }
+        }
+
+        if let Some(rest) = interval.checked_sub(started.elapsed()) {
+            std::thread::sleep(rest);
+        }
+    }
 }
 
 fn draw_box(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: Rgba<u8>) {

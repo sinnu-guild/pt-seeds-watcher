@@ -60,12 +60,41 @@ fn prepare(frame: &Frame) -> (GrayImage, f32) {
         let p = &frame.rgba[i..i + 3];
         px.0[0] = (0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32) as u8;
     }
+    stretch_contrast(&mut gray);
     let scale = (WORK_HEIGHT / frame.height as f32).clamp(1.0, 4.0);
     if scale > 1.0 {
         let (w, h) = ((half_w as f32 * scale) as u32, (frame.height as f32 * scale) as u32);
         gray = imageops::resize(&gray, w, h, imageops::FilterType::Lanczos3);
     }
     (gray, scale)
+}
+
+/// Spreads brightness over the full 0-255 range, ignoring the darkest and
+/// brightest 1% of pixels.
+fn stretch_contrast(img: &mut GrayImage) {
+    let mut hist = [0u32; 256];
+    for p in img.pixels() {
+        hist[p.0[0] as usize] += 1;
+    }
+    let cut = (img.width() * img.height()) / 100;
+    let (mut lo, mut seen) = (0usize, 0u32);
+    while lo < 255 && seen + hist[lo] <= cut {
+        seen += hist[lo];
+        lo += 1;
+    }
+    let (mut hi, mut seen) = (255usize, 0u32);
+    while hi > 0 && seen + hist[hi] <= cut {
+        seen += hist[hi];
+        hi -= 1;
+    }
+    if hi <= lo {
+        return;
+    }
+    let range = (hi - lo) as f32;
+    for p in img.pixels_mut() {
+        let v = (p.0[0] as f32 - lo as f32) / range * 255.0;
+        p.0[0] = v.clamp(0.0, 255.0) as u8;
+    }
 }
 
 /// Reads the text in the seed-list half of the frame.

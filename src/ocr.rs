@@ -6,7 +6,7 @@
 //! would otherwise look like a list row.
 //!
 //! The picture is turned gray, its contrast stretched (the "Out of Stock"
-//! text is pale orange on cream) and scaled so the window is about 1440
+//! text is pale orange on cream) and scaled so the window is about 2160
 //! pixels tall. Without the upscaling the outlined "Stock: 1" text isn't read.
 
 use image::{imageops, GrayImage};
@@ -20,7 +20,7 @@ use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 use crate::capture::Frame;
 
 /// The window height the picture is scaled to before reading.
-const WORK_HEIGHT: f32 = 1440.0;
+const WORK_HEIGHT: f32 = 2160.0;
 
 /// One line of text, with its box in game-window pixels.
 #[derive(Clone, Debug)]

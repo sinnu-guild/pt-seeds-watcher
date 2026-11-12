@@ -11,6 +11,16 @@ toml = "0.8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ureq = "2"
 notify-rust = "4"
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Security_Cryptography",
+    "Storage_Streams",
+    "Win32_System_WinRT",
+] }
 
 # Image matching is slow without optimisations, so even debug builds of
 # dependencies and this crate get some.

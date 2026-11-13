@@ -58,6 +58,40 @@ pub fn normalize(s: &str) -> String {
 }
 
 
+/// Which seed a line of text is the name of, if any. When two seeds are
+/// equally close, it's too unclear to say.
+fn which_seed<'a>(text: &str, seeds: &[(&'a str, String)]) -> Option<&'a str> {
+    let line = normalize(text);
+    if line.is_empty() {
+        return None;
+    }
+    let mut best: Option<(usize, &str)> = None;
+    let mut tie = false;
+    for (name, norm) in seeds {
+        let d = if line.contains(norm.as_str()) && line.len() <= norm.len() + 3 {
+            0 // a stray mark read before or after the name
+        } else {
+            edit_distance(&line, norm)
+        };
+        if d > tolerance(norm) {
+            continue;
+        }
+        match best {
+            Some((bd, _)) if d > bd => {}
+            Some((bd, bn)) if d == bd => tie |= bn != *name,
+            _ => {
+                best = Some((d, name));
+                tie = false;
+            }
+        }
+    }
+    if tie {
+        None
+    } else {
+        best.map(|(_, n)| n)
+    }
+}
+
 /// What a stock line says: "Out of Stock" or "Stock: N".
 pub fn classify(text: &str) -> Option<Status> {
     let s = normalize(text);
@@ -106,5 +140,65 @@ fn next_deal(text: &str) -> Option<String> {
         })
         .collect();
     (!fixed.is_empty()).then(|| fixed.join(" "))
+}
+
+/// Reads the shop. `known` is every seed name we know of (so one seed's name
+/// isn't mistaken for a similar one); `wanted` are the seeds to report on.
+pub fn read_shop(lines: &[Line], known: &[String], wanted: &[String]) -> ShopView {
+    let mut all: Vec<(&str, String)> = known.iter().chain(wanted).map(|n| (n.as_str(), normalize(n))).collect();
+    all.sort_by(|a, b| a.0.cmp(b.0));
+    all.dedup_by(|a, b| a.0 == b.0);
+
+    let names: Vec<(usize, String)> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, l)| which_seed(&l.text, &all).map(|n| (i, n.to_string())))
+        .collect();
+
+    let shop_open = lines.iter().any(|l| {
+        let n = normalize(&l.text);
+        classify(&l.text).is_some() || n.contains("untilnextdeal") || n.contains("restock")
+    });
+
+    let seeds = wanted
+        .iter()
+        .map(|want| {
+            let Some(&(ni, _)) = names.iter().find(|(_, n)| n == want) else {
+                return SeedView {
+                    name: want.clone(),
+                    status: Status::NotVisible,
+                    name_line: None,
+                    stock_line: None,
+                };
+            };
+            let name = &lines[ni];
+            // The line just under the name, starting about where it starts.
+            let below = lines
+                .iter()
+                .enumerate()
+                .filter(|(i, l)| {
+                    *i != ni
+                        && l.y > name.y + 0.5 * name.h
+                        && l.y < name.y + 2.5 * name.h
+                        && (l.x - name.x).abs() < 1.5 * name.h
+                })
+                .min_by(|a, b| a.1.y.total_cmp(&b.1.y))
+                .map(|(i, _)| i);
+            let status = below.and_then(|i| classify(&lines[i].text)).unwrap_or(Status::Unknown);
+            SeedView {
+                name: want.clone(),
+                status,
+                name_line: Some(ni),
+                stock_line: below,
+            }
+        })
+        .collect();
+
+    ShopView {
+        shop_open,
+        next_deal: lines.iter().find_map(|l| next_deal(&l.text)),
+        seeds,
+        names,
+    }
 }
 

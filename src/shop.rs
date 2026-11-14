@@ -300,4 +300,84 @@ mod tests {
         ];
         assert_eq!(statuses(&lines, &["Baobab Tree Seed"]), vec![Status::Unknown]);
     }
+
+    #[test]
+    fn tolerates_ocr_mistakes() {
+        let lines = vec![
+            line("Baobab Tree Sced", 527.0, 274.0, 30.0),
+            line("0ut of Stock", 527.0, 317.0, 22.0),
+            line("Maple Tree Seed", 527.0, 407.0, 30.0),
+            line("Stock; l", 527.0, 450.0, 22.0),
+            line("Star Fruit Seed", 527.0, 672.0, 30.0),
+            line("Stock:10", 527.0, 715.0, 22.0),
+        ];
+        assert_eq!(
+            statuses(&lines, &["Baobab Tree Seed", "Maple Tree Seed", "Star Fruit Seed"]),
+            vec![Status::OutOfStock, Status::InStock(1), Status::InStock(10)]
+        );
+    }
+
+    #[test]
+    fn similar_names_are_not_confused() {
+        let mut names = known();
+        names.push("Bear Seed".into());
+        let lines = vec![line("Bean Seed", 527.0, 539.0, 30.0), line("Stock: 1", 527.0, 582.0, 22.0)];
+        let wanted = vec!["Bear Seed".to_string()];
+        let view = read_shop(&lines, &names, &wanted);
+        assert_eq!(view.seeds[0].status, Status::NotVisible);
+    }
+
+    #[test]
+    fn longer_names_do_not_count_as_shorter_ones() {
+        let known = crate::seedlist::built_in().seeds;
+        let lines = vec![
+            line("Sweet Potato Seed", 527.0, 274.0, 30.0),
+            line("Stock: 1", 527.0, 317.0, 22.0),
+            line("Sugar Apple Seed", 527.0, 407.0, 30.0),
+            line("Stock: 1", 527.0, 450.0, 22.0),
+        ];
+        let wanted: Vec<String> = ["Potato Seed", "Apple Seed", "Sweet Potato Seed", "Sugar Apple Seed"]
+            .map(String::from)
+            .to_vec();
+        let got: Vec<Status> = read_shop(&lines, &known, &wanted).seeds.iter().map(|s| s.status).collect();
+        use Status::*;
+        assert_eq!(got, vec![NotVisible, NotVisible, InStock(1), InStock(1)]);
+    }
+
+    #[test]
+    fn shop_closed() {
+        let lines = vec![line("Inventory", 100.0, 100.0, 30.0)];
+        let view = read_shop(&lines, &known(), &["Baobab Tree Seed".to_string()]);
+        assert!(!view.shop_open);
+        assert_eq!(view.seeds[0].status, Status::NotVisible);
+    }
+
+    /// Guards seeds.json updates: every listed name must be recognised as
+    /// itself, and no two names may be close enough to be mixed up.
+    #[test]
+    fn seed_list_names_are_distinct() {
+        let list = crate::seedlist::built_in().seeds;
+        let all: Vec<(&str, String)> = list.iter().map(|n| (n.as_str(), normalize(n))).collect();
+        for name in &list {
+            assert_eq!(which_seed(name, &all), Some(name.as_str()), "{name} isn't recognised as itself");
+        }
+        for (i, (a, na)) in all.iter().enumerate() {
+            for (b, nb) in &all[i + 1..] {
+                let d = edit_distance(na, nb);
+                assert!(
+                    d > tolerance(na).max(tolerance(nb)),
+                    "\"{a}\" and \"{b}\" are too alike to tell apart reliably"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn classify_lines() {
+        assert_eq!(classify("Out of Stock"), Some(Status::OutOfStock));
+        assert_eq!(classify("Stock: 3"), Some(Status::InStock(3)));
+        assert_eq!(classify("Stock: 12"), Some(Status::InStock(12)));
+        assert_eq!(classify("Can be harvested once."), None);
+        assert_eq!(classify("Stock"), None);
+    }
 }

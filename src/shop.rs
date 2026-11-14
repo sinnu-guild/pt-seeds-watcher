@@ -225,3 +225,79 @@ pub fn read_shop(lines: &[Line], known: &[String], wanted: &[String]) -> ShopVie
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(text: &str, x: f32, y: f32, h: f32) -> Line {
+        Line {
+            text: text.into(),
+            x,
+            y,
+            w: 200.0,
+            h,
+        }
+    }
+
+    /// What the game's shop actually read as at 1920x1080.
+    fn shop() -> Vec<Line> {
+        vec![
+            line("Until next deal: Imin 37sec", 639.0, 204.0, 22.0),
+            line("Baobab Tree Seed", 527.0, 274.0, 30.0),
+            line("Out of Stock", 527.0, 317.0, 22.0),
+            line("Maple Tree Seed", 527.0, 407.0, 30.0),
+            line("Out of Stock", 527.0, 450.0, 22.0),
+            line("Bean Seed", 527.0, 539.0, 30.0),
+            line("Out of Stock", 527.0, 582.0, 22.0),
+            line("Star Fruit Seed", 527.0, 672.0, 30.0),
+            line("Out of Stock", 527.0, 715.0, 22.0),
+            line("Sugar Apple Seed", 526.0, 804.0, 30.0),
+            line("Stock: 1", 527.0, 846.0, 22.0),
+        ]
+    }
+
+    fn known() -> Vec<String> {
+        ["Baobab Tree Seed", "Maple Tree Seed", "Bean Seed", "Star Fruit Seed", "Sugar Apple Seed"]
+            .map(String::from)
+            .to_vec()
+    }
+
+    fn statuses(lines: &[Line], wanted: &[&str]) -> Vec<Status> {
+        let wanted: Vec<String> = wanted.iter().map(|s| s.to_string()).collect();
+        read_shop(lines, &known(), &wanted).seeds.iter().map(|s| s.status).collect()
+    }
+
+    #[test]
+    fn reads_real_shop() {
+        let view = read_shop(&shop(), &known(), &known());
+        let got: Vec<Status> = view.seeds.iter().map(|s| s.status).collect();
+        use Status::*;
+        assert_eq!(got, vec![OutOfStock, OutOfStock, OutOfStock, OutOfStock, InStock(1)]);
+        assert!(view.shop_open);
+        assert_eq!(view.next_deal.as_deref(), Some("1min 37sec"));
+    }
+
+    #[test]
+    fn seed_not_in_view() {
+        let lines: Vec<Line> = shop().into_iter().skip(3).collect(); // Baobab scrolled away
+        assert_eq!(statuses(&lines, &["Baobab Tree Seed"]), vec![Status::NotVisible]);
+    }
+
+    #[test]
+    fn last_row_cut_off_is_unknown_not_in_stock() {
+        let mut lines = shop();
+        lines.pop(); // "Stock: 1" below the edge of the list
+        assert_eq!(statuses(&lines, &["Sugar Apple Seed"]), vec![Status::Unknown]);
+    }
+
+    #[test]
+    fn next_rows_stock_line_does_not_count() {
+        let lines = vec![
+            line("Baobab Tree Seed", 527.0, 274.0, 30.0),
+            // its own stock line wasn't read; the next row's is far below
+            line("Maple Tree Seed", 527.0, 407.0, 30.0),
+            line("Stock: 2", 527.0, 450.0, 22.0),
+        ];
+        assert_eq!(statuses(&lines, &["Baobab Tree Seed"]), vec![Status::Unknown]);
+    }
+}

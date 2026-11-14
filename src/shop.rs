@@ -57,6 +57,29 @@ pub fn normalize(s: &str) -> String {
         .collect()
 }
 
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1; b.len() + 1];
+        for (j, cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != cb);
+            cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/// How many misread letters a name may have and still count.
+fn tolerance(norm_name: &str) -> usize {
+    match norm_name.chars().count() {
+        0..=6 => 0,
+        7..=11 => 1,
+        _ => 2,
+    }
+}
 
 /// Which seed a line of text is the name of, if any. When two seeds are
 /// equally close, it's too unclear to say.

@@ -109,6 +109,77 @@ impl App {
         self.live.lock().unwrap().running
     }
 
+    fn poll(&mut self, ctx: &egui::Context) {
+        if let Some(rx) = &self.list_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.list_rx = None;
+                match result {
+                    Ok(list) => {
+                        self.list = list;
+                        self.list_source = Source::Online;
+                        self.list_note = None;
+                    }
+                    Err(e) => self.list_note = Some(e),
+                }
+            }
+        }
+        if let Some(rx) = &self.check_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.check_rx = None;
+                match result {
+                    Ok(check) => {
+                        self.preview = Some(make_preview(ctx, &check));
+                        self.preview_error = None;
+                    }
+                    Err(e) => {
+                        self.preview = None;
+                        self.preview_error = Some(e);
+                    }
+                }
+            }
+        }
+        if let Some(rx) = &self.alert_rx {
+            if let Ok(failed) = rx.try_recv() {
+                self.alert_rx = None;
+                self.alert_note = Some(if failed.is_empty() {
+                    "Test alert sent. Check that it arrived everywhere you turned on.".into()
+                } else {
+                    failed.join("\n")
+                });
+            }
+        }
+        if self.settings != self.saved {
+            self.settings.save();
+            self.saved = self.settings.clone();
+        }
+    }
+
+    fn start(&mut self, ctx: &egui::Context) {
+        let ctx = ctx.clone();
+        self.stop = Some(watcher::start(self.settings.clone(), self.known(), self.live.clone(), move || {
+            ctx.request_repaint()
+        }));
+        self.running_settings = Some(self.settings.clone());
+    }
+
+    fn stop(&mut self) {
+        if let Some(stop) = self.stop.take() {
+            stop.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn check_now(&mut self, ctx: &egui::Context) {
+        let (tx, rx) = mpsc::channel();
+        let (window, known, wanted) = (self.settings.window().to_string(), self.known(), self.settings.picked.clone());
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            ocr::init_thread();
+            let _ = tx.send(watcher::check_once(&window, &known, &wanted));
+            ctx.request_repaint();
+        });
+        self.check_rx = Some(rx);
+    }
+
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.heading(RichText::new(format!("🌱 {APP_NAME}")).strong());
@@ -194,6 +265,118 @@ impl App {
         });
     }
 
+    fn watch_tab(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::Panel::left("picker").resizable(false).exact_size(290.0).show(ui, |ui| {
+            ui.add_space(6.0);
+            self.seed_picker(ui);
+        });
+        egui::CentralPanel::default_margins().show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("watch").auto_shrink([false, false]).show(ui, |ui| {
+                self.watch_controls(ui, ctx);
+            });
+        });
+    }
+
+    fn watch_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let running = self.running();
+
+        ui.heading("2. Set up the game");
+        ui.label("Open the seed shop and scroll the list so your seeds show. Leave the game open (it can be behind other windows, but not minimized).");
+        ui.horizontal(|ui| {
+            ui.label("Game window:");
+            let shown = if self.settings.window_title.is_empty() {
+                format!("Find \"{DEFAULT_WINDOW}\" automatically")
+            } else {
+                self.settings.window_title.clone()
+            };
+            egui::ComboBox::from_id_salt("window").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.settings.window_title, String::new(), format!("Find \"{DEFAULT_WINDOW}\" automatically"));
+                for (title, label) in &self.windows {
+                    ui.selectable_value(&mut self.settings.window_title, title.clone(), label.as_str());
+                }
+            });
+            if ui.button("Refresh").on_hover_text("Reload the list of open windows").clicked() {
+                self.windows = window_titles();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Check every");
+            ui.add(egui::Slider::new(&mut self.settings.check_every_secs, 10..=120).suffix(" s"));
+        });
+        ui.horizontal(|ui| {
+            let busy = self.check_rx.is_some();
+            if ui
+                .add_enabled(!busy, egui::Button::new(RichText::new("Check now").size(15.0)))
+                .on_hover_text("Look at the game once and show what the app can see")
+                .clicked()
+            {
+                self.check_now(ctx);
+            }
+            if busy {
+                ui.spinner();
+                ui.label("Looking...");
+            }
+        });
+        self.preview_ui(ui);
+
+        ui.add_space(10.0);
+        ui.separator();
+        ui.heading("3. Watch");
+        ui.horizontal(|ui| {
+            if running {
+                if ui.add(egui::Button::new(RichText::new("Stop watching").size(17.0)).min_size([180.0, 34.0].into())).clicked() {
+                    self.stop();
+                }
+            } else {
+                let can = !self.settings.picked.is_empty();
+                let button = egui::Button::new(RichText::new("Start watching").size(17.0).color(Color32::WHITE))
+                    .fill(GREEN)
+                    .min_size([180.0, 34.0].into());
+                if ui.add_enabled(can, button).on_disabled_hover_text("Pick at least one seed first").clicked() {
+                    self.start(ctx);
+                }
+            }
+            if self.stop.is_some() && !running {
+                self.stop = None;
+            }
+        });
+        if running && self.running_settings.as_ref() != Some(&self.settings) {
+            ui.label(RichText::new("You changed something. Stop and start again to use the changes.").color(ORANGE));
+        }
+
+        let live = self.live.lock().unwrap();
+        if running || live.last_check.is_some() {
+            ui.add_space(6.0);
+            if let Some(p) = &live.problem {
+                ui.label(RichText::new(format!("⚠ {p}")).color(RED));
+            }
+            egui::Grid::new("status").striped(true).num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
+                for (name, status) in &live.seeds {
+                    ui.label(RichText::new(name).size(15.0));
+                    ui.label(status_text(*status).size(15.0));
+                    ui.end_row();
+                }
+            });
+            ui.horizontal(|ui| {
+                if let Some(t) = &live.last_check {
+                    ui.label(RichText::new(format!("Last checked {t}")).weak());
+                }
+                if let Some(d) = &live.next_deal {
+                    ui.label(RichText::new(format!("· Shop restocks in about {d}")).weak());
+                }
+            });
+        }
+        if !live.log.is_empty() {
+            egui::CollapsingHeader::new("Activity").default_open(false).show(ui, |ui| {
+                egui::ScrollArea::vertical().id_salt("log").max_height(160.0).stick_to_bottom(true).show(ui, |ui| {
+                    for line in &live.log {
+                        ui.label(RichText::new(line).monospace().size(12.0));
+                    }
+                });
+            });
+        }
+    }
+
 }
 
 impl eframe::App for App {
@@ -229,4 +412,35 @@ impl Drop for App {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+fn status_text(s: Status) -> RichText {
+    let t = RichText::new(s.describe());
+    match s {
+        Status::InStock(_) => t.color(GREEN).strong(),
+        Status::OutOfStock => t.color(ORANGE),
+        Status::Unknown => t.color(RED),
+        Status::NotVisible => t.weak(),
+    }
+}
+
+/// Open windows worth offering in the game-window picker: (title, label).
+fn window_titles() -> Vec<(String, String)> {
+    let mut titles: Vec<(String, String)> = capture::list_windows()
+        .into_iter()
+        .filter(|w| (w.minimized || (w.width >= 300 && w.height >= 200)) && w.title != APP_NAME)
+        .map(|w| {
+            let label = if w.minimized {
+                format!("{} (minimized)", w.title)
+            } else if w.cloaked {
+                format!("{} (on another desktop)", w.title)
+            } else {
+                w.title.clone()
+            };
+            (w.title, label)
+        })
+        .collect();
+    titles.sort_by_key(|t| t.0.to_lowercase());
+    titles.dedup_by(|a, b| a.0 == b.0);
+    titles
 }

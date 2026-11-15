@@ -109,6 +109,91 @@ impl App {
         self.live.lock().unwrap().running
     }
 
+    fn header(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.heading(RichText::new(format!("🌱 {APP_NAME}")).strong());
+            ui.add_space(16.0);
+            ui.selectable_value(&mut self.tab, Tab::Watch, RichText::new("Watch").size(16.0));
+            ui.selectable_value(&mut self.tab, Tab::Alerts, RichText::new("Alerts").size(16.0));
+            ui.selectable_value(&mut self.tab, Tab::Guide, RichText::new("How to use").size(16.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (text, tip) = match self.list_source {
+                    Source::Online => ("Seed list: up to date", "Downloaded just now."),
+                    Source::Saved => ("Seed list: saved copy", "Couldn't download the latest list; using the last one."),
+                    Source::BuiltIn => ("Seed list: built-in", "Couldn't download the latest list; using the one built into the app."),
+                };
+                let tip = match &self.list_note {
+                    Some(n) if self.list_source != Source::Online => format!("{tip}\n{n}"),
+                    _ if self.list_rx.is_some() => "Checking for an updated list...".to_string(),
+                    _ => tip.to_string(),
+                };
+                let updated = if self.list.updated.is_empty() { String::new() } else { format!(" ({})", self.list.updated) };
+                ui.label(RichText::new(format!("{text}{updated}")).weak()).on_hover_text(tip);
+            });
+        });
+        if seedlist::is_newer(&self.list.latest_app_version, VERSION) {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("A new version ({}) is available.", self.list.latest_app_version))
+                        .color(ORANGE)
+                        .strong(),
+                );
+                if !self.list.download_url.is_empty() {
+                    ui.hyperlink_to("Download it", &self.list.download_url);
+                }
+            });
+        }
+        if !self.list.message.trim().is_empty() {
+            ui.label(RichText::new(self.list.message.trim()).color(ORANGE));
+        }
+    }
+
+    fn seed_picker(&mut self, ui: &mut egui::Ui) {
+        ui.heading("1. Pick your seeds");
+        ui.label("You'll get an alert when any of these is in stock.");
+        ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search seeds..."));
+        ui.add_space(4.0);
+        let search = self.search.to_lowercase();
+        let known = self.known();
+        egui::ScrollArea::vertical()
+            .id_salt("seed-list")
+            .max_height(ui.available_height() - 90.0)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for name in known.iter().filter(|n| n.to_lowercase().contains(&search)) {
+                    let mut on = self.settings.picked.contains(name);
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut on, name.as_str()).changed() {
+                            if on {
+                                self.settings.picked.push(name.clone());
+                            } else {
+                                self.settings.picked.retain(|p| p != name);
+                            }
+                        }
+                        if self.settings.custom_seeds.contains(name)
+                            && !self.list.seeds.contains(name)
+                            && ui.small_button("remove").on_hover_text("Remove this seed you added").clicked()
+                        {
+                            self.settings.custom_seeds.retain(|c| c != name);
+                            self.settings.picked.retain(|p| p != name);
+                        }
+                    });
+                }
+            });
+        ui.separator();
+        ui.label("Seed missing? Type its name exactly as the shop shows it:");
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut self.new_seed).hint_text("e.g. Golden Corn Seed").desired_width(170.0));
+            let name = self.new_seed.trim().to_string();
+            let exists = self.known().iter().any(|k| k.eq_ignore_ascii_case(&name));
+            if ui.add_enabled(!name.is_empty() && !exists, egui::Button::new("Add")).clicked() {
+                self.settings.custom_seeds.push(name.clone());
+                self.settings.picked.push(name);
+                self.new_seed.clear();
+            }
+        });
+    }
+
 }
 
 impl eframe::App for App {

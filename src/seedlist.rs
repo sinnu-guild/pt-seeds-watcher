@@ -49,3 +49,18 @@ pub fn built_in() -> SeedList {
 pub fn saved() -> Option<SeedList> {
     parse(&std::fs::read_to_string(data_dir().join("seeds.json")).ok()?)
 }
+
+/// Downloads the list and saves a copy for when the player is offline.
+pub fn download() -> Result<SeedList, String> {
+    let text = ureq::get(URL)
+        .timeout(std::time::Duration::from_secs(10))
+        .call()
+        .map_err(|e| format!("couldn't download the seed list: {e}"))?
+        .into_string()
+        .map_err(|e| format!("couldn't download the seed list: {e}"))?;
+    let list = parse(&text).ok_or("the downloaded seed list is broken")?;
+    let dir = data_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join("seeds.json"), &text);
+    Ok(list)
+}

@@ -50,7 +50,7 @@ fn main() {
 
 /// For testing, `pt-seeds-watcher.exe check <picture.png | game>`: reads a
 /// saved screenshot (or the live game window, like "Check now"), prints what
-/// it found for every seed in the built-in list.
+/// it found for every seed in the built-in list, and saves check-preview.png.
 fn cmd_check(source: &str) -> Result<(), String> {
     ocr::init_thread();
     let known = seedlist::built_in().seeds;
@@ -84,5 +84,11 @@ fn cmd_check(source: &str) -> Result<(), String> {
     for s in &check.view.seeds {
         println!("  {:<22} {}", s.name, s.status.describe());
     }
+    let (w, h) = (check.frame.width, check.frame.height);
+    image::RgbaImage::from_raw(w, h, app::annotate(&check))
+        .ok_or("preview had the wrong size")?
+        .save("check-preview.png")
+        .map_err(|e| format!("couldn't save check-preview.png: {e}"))?;
+    println!("\nSaved check-preview.png");
     Ok(())
 }

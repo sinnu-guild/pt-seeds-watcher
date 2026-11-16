@@ -377,6 +377,38 @@ impl App {
         }
     }
 
+    fn preview_ui(&mut self, ui: &mut egui::Ui) {
+        if let Some(e) = &self.preview_error {
+            ui.label(RichText::new(format!("⚠ {e}")).color(RED));
+        }
+        let Some(p) = &self.preview else { return };
+        ui.add_space(4.0);
+        ui.label(RichText::new(format!("What the app saw at {}:", p.time)).strong());
+        if !p.shop_open {
+            ui.label(RichText::new("⚠ This doesn't look like the seed shop. Open it in the game.").color(RED));
+        }
+        if p.seeds.is_empty() {
+            ui.label("Pick some seeds to see their status here.");
+        }
+        for (name, status) in &p.seeds {
+            ui.horizontal(|ui| {
+                ui.label(name);
+                ui.label(status_text(*status));
+            });
+        }
+        if let Some(d) = &p.next_deal {
+            ui.label(RichText::new(format!("Shop restocks in about {d}")).weak());
+        }
+        let w = ui.available_width().min(760.0);
+        let h = w * p.size[1] as f32 / p.size[0] as f32;
+        ui.add(egui::Image::new(egui::load::SizedTexture::new(p.texture.id(), [w, h])));
+        ui.label(
+            RichText::new("Boxes: green = in stock, orange = out of stock, red = stock line not readable, gray = other seeds. The right half (shaded) is ignored.")
+                .weak()
+                .size(12.0),
+        );
+    }
+
 }
 
 impl eframe::App for App {
@@ -444,3 +476,78 @@ fn window_titles() -> Vec<(String, String)> {
     titles.dedup_by(|a, b| a.0 == b.0);
     titles
 }
+
+fn make_preview(ctx: &egui::Context, c: &Check) -> Preview {
+    let (w, h) = (c.frame.width as usize, c.frame.height as usize);
+    let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &annotate(c));
+    Preview {
+        texture: ctx.load_texture("preview", image, egui::TextureOptions::LINEAR),
+        size: [w, h],
+        time: c.time.clone(),
+        shop_open: c.view.shop_open,
+        next_deal: c.view.next_deal.clone(),
+        seeds: c.view.seeds.iter().map(|s| (s.name.clone(), s.status)).collect(),
+    }
+}
+
+/// The captured picture (RGBA) with boxes on what was read and the ignored
+/// right half shaded.
+pub fn annotate(c: &Check) -> Vec<u8> {
+    let (w, h) = (c.frame.width as usize, c.frame.height as usize);
+    let mut rgba = c.frame.rgba.clone();
+    // Shade the ignored right half.
+    for y in 0..h {
+        for x in w / 2..w {
+            let i = (y * w + x) * 4;
+            for k in 0..3 {
+                rgba[i + k] /= 3;
+            }
+        }
+    }
+    let mut boxed = |i: usize, color: [u8; 3]| {
+        let l = &c.lines[i];
+        let pad = 4.0;
+        draw_box(&mut rgba, w, h, l.x - pad, l.y - pad, l.w + 2.0 * pad, l.h + 2.0 * pad, color);
+    };
+    for (i, _) in &c.view.names {
+        boxed(*i, [150, 150, 150]);
+    }
+    for s in &c.view.seeds {
+        let color = match s.status {
+            Status::InStock(_) => [40, 200, 80],
+            Status::OutOfStock => [240, 140, 30],
+            _ => [220, 50, 50],
+        };
+        if let Some(i) = s.name_line {
+            boxed(i, color);
+        }
+        if let Some(i) = s.stock_line {
+            boxed(i, color);
+        }
+    }
+    rgba
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_box(rgba: &mut [u8], w: usize, h: usize, x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]) {
+    let (x0, y0) = (x.max(0.0) as usize, y.max(0.0) as usize);
+    let (x1, y1) = (((x + bw) as usize).min(w.saturating_sub(1)), ((y + bh) as usize).min(h.saturating_sub(1)));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let mut put = |px: usize, py: usize| {
+        let i = (py * w + px) * 4;
+        rgba[i..i + 3].copy_from_slice(&color);
+    };
+    for t in 0..3 {
+        for px in x0..=x1 {
+            put(px, (y0 + t).min(y1));
+            put(px, y1.saturating_sub(t).max(y0));
+        }
+        for py in y0..=y1 {
+            put((x0 + t).min(x1), py);
+            put(x1.saturating_sub(t).max(x0), py);
+        }
+    }
+}
+

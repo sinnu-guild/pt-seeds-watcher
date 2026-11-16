@@ -409,6 +409,57 @@ impl App {
         );
     }
 
+    fn alerts_tab(&mut self, ui: &mut egui::Ui) {
+        let a = &mut self.settings.alerts;
+        ui.heading("On this computer");
+        ui.checkbox(&mut a.desktop, "Show a Windows notification");
+        ui.checkbox(&mut a.sound, "Play a sound");
+        ui.checkbox(&mut a.notify_when_window_lost, "Alert me if the app can't see my seeds for about a minute (shop closed, game minimized...)");
+
+        ui.add_space(12.0);
+        ui.heading("On your phone (free, optional)");
+        ui.label("1. Install the free \"ntfy\" app (Android or iPhone).");
+        ui.label("2. Click \"Make a topic\" below (or type your own hard-to-guess name).");
+        ui.label("3. In the ntfy app, tap + and subscribe to exactly the same topic name.");
+        ui.label(RichText::new("Anyone who knows the topic name can read your alerts, so keep it hard to guess.").weak());
+        ui.horizontal(|ui| {
+            ui.label("Topic:");
+            ui.add(egui::TextEdit::singleline(&mut a.ntfy_topic).desired_width(240.0).hint_text("leave empty to turn off"));
+            if ui.button("Make a topic").clicked() {
+                a.ntfy_topic = random_topic();
+            }
+            if !a.ntfy_topic.is_empty() && ui.button("Copy").clicked() {
+                ui.ctx().copy_text(a.ntfy_topic.clone());
+            }
+        });
+
+        ui.add_space(12.0);
+        ui.heading("In Discord (optional)");
+        ui.label("Paste a channel webhook URL (Channel settings > Integrations > Webhooks).");
+        ui.add(egui::TextEdit::singleline(&mut a.discord_webhook).desired_width(480.0).hint_text("https://discord.com/api/webhooks/..."));
+
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            let busy = self.alert_rx.is_some();
+            if ui.add_enabled(!busy, egui::Button::new("Send a test alert")).clicked() {
+                let alerts = self.settings.alerts.clone();
+                let (tx, rx) = mpsc::channel();
+                let ctx = ui.ctx().clone();
+                std::thread::spawn(move || {
+                    let _ = tx.send(notify::send(&alerts, watcher::ALERT_TITLE, "Test alert. If you can read this, alerts work!"));
+                    ctx.request_repaint();
+                });
+                self.alert_rx = Some(rx);
+                self.alert_note = None;
+            }
+            if busy {
+                ui.spinner();
+            }
+        });
+        if let Some(n) = &self.alert_note {
+            ui.label(n);
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -475,6 +526,21 @@ fn window_titles() -> Vec<(String, String)> {
     titles.sort_by_key(|t| t.0.to_lowercase());
     titles.dedup_by(|a, b| a.0 == b.0);
     titles
+}
+
+fn random_topic() -> String {
+    use std::hash::BuildHasher;
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut n = std::collections::hash_map::RandomState::new().hash_one(seed);
+    let mut s = String::from("pt-seeds-");
+    for _ in 0..12 {
+        s.push(b"abcdefghijkmnpqrstuvwxyz23456789"[(n % 32) as usize] as char);
+        n /= 32;
+    }
+    s
 }
 
 fn make_preview(ctx: &egui::Context, c: &Check) -> Preview {

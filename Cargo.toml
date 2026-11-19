@@ -22,6 +22,9 @@ windows = { version = "0.62", features = [
     "Win32_System_WinRT",
 ] }
 
+[build-dependencies]
+winresource = "0.1"
+
 # Image matching is slow without optimisations, so even debug builds of
 # dependencies and this crate get some.
 [profile.dev]

@@ -16,6 +16,8 @@ mod watcher;
 
 use eframe::egui;
 
+const ICON: &[u8] = include_bytes!("../assets/icon.png");
+
 fn main() {
     capture::init_dpi();
 
@@ -32,10 +34,18 @@ fn main() {
         }
     }
 
-    let viewport = egui::ViewportBuilder::default()
+    let icon = image::load_from_memory(ICON).map(|i| i.to_rgba8()).ok();
+    let mut viewport = egui::ViewportBuilder::default()
         .with_title(app::APP_NAME)
         .with_inner_size([1000.0, 720.0])
         .with_min_inner_size([760.0, 520.0]);
+    if let Some(icon) = icon {
+        viewport = viewport.with_icon(egui::IconData {
+            width: icon.width(),
+            height: icon.height(),
+            rgba: icon.into_raw(),
+        });
+    }
     let options = eframe::NativeOptions {
         viewport,
         ..Default::default()

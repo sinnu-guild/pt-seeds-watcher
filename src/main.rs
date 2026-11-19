@@ -2,6 +2,9 @@
 //! a seed you picked is in stock. It only reads the screen; it never clicks,
 //! types or buys anything.
 
+// No console window when players double-click the exe.
+#![windows_subsystem = "windows"]
+
 #[cfg(not(windows))]
 compile_error!("PT Seed Watcher only runs on Windows.");
 
@@ -24,6 +27,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let [cmd, path] = args.as_slice() {
         if cmd == "check" {
+            attach_console();
             std::process::exit(match cmd_check(path) {
                 Ok(()) => 0,
                 Err(e) => {
@@ -57,6 +61,13 @@ fn main() {
     );
 }
 
+/// Lets `check` print to the terminal it was started from.
+fn attach_console() {
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
 
 /// For testing, `pt-seeds-watcher.exe check <picture.png | game>`: reads a
 /// saved screenshot (or the live game window, like "Check now"), prints what

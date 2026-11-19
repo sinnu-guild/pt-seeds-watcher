@@ -1,122 +1,94 @@
-# pt-seeds-watcher
+# PT Seed Watcher
 
-Alerts you when a seed you want shows up in the Play Together seed shop.
+Get an alert when a Play Together seed you want is in stock, so you don't
+have to keep checking the seed shop.
 
-It takes a picture of the game window every 20 seconds and looks for the
-seeds you've chosen. That's all it does: it never clicks, types or buys
-anything, and it doesn't read the game's memory or network traffic.
+Pick your seeds, open the seed shop in the game, click **Start watching**,
+and go do something else. When one of your seeds comes into stock you get a
+Windows notification and a sound, and optionally a phone or Discord alert.
 
-## Setup (once)
+The app only looks at the screen. It never clicks, types, buys anything, or
+touches the game's files or memory.
 
-Run everything from **PowerShell** in this folder, not from WSL.
+## Download and run
 
-```powershell
-cd D:\Codes\pt-seeds-watcher
-cargo build --release
-```
+1. Download `pt-seeds-watcher.exe` from the
+   [latest release](https://github.com/dthrcrpz/pt-seeds-watcher/releases/latest).
+2. Double-click it. Nothing to install.
+3. If Windows says **"Windows protected your PC"**, click **More info**, then
+   **Run anyway**. This shows up for apps that aren't from a big publisher.
 
-The first build downloads its libraries and takes a few minutes.
+The **How to use** tab in the app walks you through the rest.
 
-## 1. Check that the watcher can see the game
+## Requirements
 
-1. Open the game and open the seed shop.
-2. Put the game where you'll keep it while you work (Desktop 2, or behind
-   your other windows). **Don't minimize it**, because Windows stops drawing minimized windows.
-3. Run:
+- Windows 10 or 11, with the game running on the same PC (the PC version or
+  an emulator).
+- The game set to **English**.
+- The seed shop open, with your seeds visible in its list. The app can only
+  check seeds that are on screen, so scroll the list to show them.
+- The game not minimized. Other windows on top of it are fine.
 
-   ```powershell
-   cargo run --release -- snapshot
-   ```
+## Phone alerts
 
-4. Open `snapshot.png`. If it shows the seed shop, you're good.
+On the **Alerts** tab, click **Make a topic**, install the free **ntfy** app
+on your phone, and subscribe to the same topic name. Use **Send a test alert**
+to check it works. You can also paste a Discord webhook URL there.
 
-If it can't find the game, run `cargo run --release -- windows` to see the
-window titles, and put the game's exact title in `window_title` in
-`config.toml`.
+---
 
-If `snapshot.png` is black or out of date while the game is on another
-desktop, move the game back to your main desktop behind your other windows
-and try again.
+## For the maintainer
 
-## 2. Make a picture for each seed
+### Updating the seed list
 
-1. Open `snapshot.png` in Paint (ideally taken while the seed is in stock).
-2. Select a box around the seed's icon, then click **Crop**.
-3. Save it as **PNG** in the `templates` folder, named after the seed,
-   for example `templates\Golden Corn.png`.
+The app downloads [seeds.json](seeds.json) from this repo's `main` branch
+each time it starts, so players get new seeds without a new download.
 
-Tips:
-- Crop from `snapshot.png`, not from a normal screenshot, so the size
-  matches what the watcher sees.
-- Include only the parts that always look the same. Leave out stock counts,
-  timers, prices that change and hover highlights.
-- If the shop still shows sold-out seeds, crop something that only looks
-  that way when the seed is buyable (for example, the icon together with a
-  coloured Buy button).
-- Don't change the game's window size afterwards. If you do, take a new
-  snapshot and crop the pictures again.
+1. Add the names to `seeds.json`, spelled exactly as the shop shows them.
+2. Change `"updated"` to today's date.
+3. Run `cargo test`. It fails if two names are too alike for the app to
+   tell apart, or if a name isn't recognised as itself.
+4. Commit and push to `main`.
 
-## 3. List the seeds in config.toml
+`"message"` in `seeds.json` is shown at the top of everyone's app (leave it
+empty for none).
 
-At the bottom of `config.toml`, add one block per seed:
+This only works while the repo is **public**: players' apps download the
+list without signing in.
 
-```toml
-[[seeds]]
-name = "Golden Corn"
-```
+### Releasing a new version
 
-## 4. Test it
+1. Bump `version` in `Cargo.toml`.
+2. `cargo build --release` (from PowerShell) gives
+   `target\release\pt-seeds-watcher.exe`.
+3. Create a GitHub release and attach the exe.
+4. Set `"latest_app_version"` in `seeds.json` to the new version and push.
+   Older apps then show "A new version is available" with a download link.
 
-```powershell
-cargo run --release -- test
-```
-
-This prints a score for each seed (1.00 = perfect match) and saves
-`debug.png` with a box around where it found each one. Green means found,
-red means the best guess wasn't good enough.
-
-A seed that's on screen usually scores above 0.9. A seed that isn't on screen
-usually scores well below 0.7. If yours are close together, crop a more distinctive
-picture or change `threshold`.
-
-## 5. Set up alerts
+### Testing without the app window
 
 ```powershell
-cargo run --release -- test-alert
+.\target\release\pt-seeds-watcher.exe check game         # read the live game
+.\target\release\pt-seeds-watcher.exe check shop.png     # read a saved screenshot
 ```
 
-By default you get a Windows notification and a sound. To get alerts on
-your phone, install the **ntfy** app, subscribe to a topic with a
-hard-to-guess name, and put that name in `ntfy_topic` in `config.toml`.
-Anyone who knows the topic name can read your alerts, so make it hard to guess.
-You can also paste a Discord webhook URL into `discord_webhook`.
+Both print every line of text the app read and each seed's status (for all
+seeds in the built-in list), and save `check-preview.png` with boxes on what
+it found. This runs the same code as the app's **Check now** button.
 
-## 6. Run it
+### How it works
 
-```powershell
-cargo run --release
-```
-
-Leave the window open while you work. Each check prints one line with every
-seed's score. When a seed appears you get one alert. You get another only after
-the seed has been gone for a few checks and comes back. If the watcher can't see
-the game window for about a minute (game closed or minimized), it alerts
-you once so you know. It can't tell if the game closes the shop menu by
-itself, though: then it just never finds any seeds. Check on it now and then.
-
-Press **Ctrl+C** to stop.
-
-You can also run the built program directly:
-`.\target\release\pt-seeds-watcher.exe` (from this folder, so it finds
-`config.toml`).
-
-## Settings
-
-All settings are in `config.toml` and explained there. The useful ones:
-
-| Setting | What it does |
-|---|---|
-| `check_every_secs` | How often to look (default 20) |
-| `threshold` | How close a match must be (default 0.85) |
-| `region` | Search only part of the window, `[x, y, width, height]` |
-| `rearm_after_misses` | Checks a seed must be gone before it can alert again |
+- [src/capture.rs](src/capture.rs) takes a picture of the game window
+  (`PrintWindow`, works when covered, not when minimized).
+- [src/ocr.rs](src/ocr.rs) reads the left half of it (the seed list) with
+  Windows' built-in text recognition, after making it gray, boosting the
+  contrast and scaling it to 2160 pixels tall.
+- [src/shop.rs](src/shop.rs) finds each seed's name and reads the line under
+  it. Only "Stock: N" counts as in stock. "Out of Stock", or a missing or
+  unreadable line (for example a row cut off at the bottom of the list), never
+  alerts.
+- [src/watcher.rs](src/watcher.rs) checks every few seconds, alerts once per
+  restock, and says so if it can't see your seeds for about a minute.
+- [src/app.rs](src/app.rs) is the window (egui);
+  [src/seedlist.rs](src/seedlist.rs) downloads the seed list;
+  settings are saved in `%APPDATA%\pt-seeds-watcher\`.

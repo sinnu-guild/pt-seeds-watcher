@@ -617,3 +617,39 @@ fn draw_box(rgba: &mut [u8], w: usize, h: usize, x: f32, y: f32, bw: f32, bh: f3
     }
 }
 
+fn guide(ui: &mut egui::Ui) {
+    let step = |ui: &mut egui::Ui, title: &str, body: &str| {
+        ui.add_space(8.0);
+        ui.label(RichText::new(title).strong().size(16.0));
+        ui.label(body);
+    };
+    ui.heading("How to use PT Seed Watcher");
+    ui.label("It watches the seed shop for you and alerts you when a seed you want is in stock, so you don't have to keep checking.");
+
+    step(ui, "1. Pick your seeds", "On the Watch tab, tick the seeds you want. If one is missing from the list, type its name exactly as the shop shows it and click Add.");
+    step(ui, "2. Open the seed shop in the game", "Open the seed shop and scroll its list so the seeds you picked are showing. The app can only see what's on screen, so it can't check seeds you have to scroll to.");
+    step(ui, "3. Click \"Check now\"", "The app looks at the game once and shows you what it saw, with a box around each seed it found. Each picked seed should say \"Out of stock\" or \"IN STOCK\". \"Not on screen\" means it couldn't find that seed: scroll the shop list or check the game window setting.");
+    step(ui, "4. Click \"Start watching\"", "The app checks every 20 seconds. When a picked seed comes into stock, you get an alert. It won't repeat the alert for the same restock.");
+    step(ui, "5. Leave the game open", "You can put other windows on top of the game, but don't minimize it: Windows stops drawing minimized windows and the app goes blind. If it can't see your seeds for about a minute, it tells you.");
+    step(ui, "Optional: alerts on your phone", "On the Alerts tab, set up the free ntfy app to get alerts on your phone, or paste a Discord webhook. Use \"Send a test alert\" to try it.");
+
+    ui.add_space(14.0);
+    ui.heading("Good to know");
+    ui.label("• The app only looks at the screen. It never clicks, types, buys anything, or touches the game's files or memory.");
+    ui.label("• The game must be in English.");
+    ui.label("• The seed list updates by itself when the app starts.");
+    ui.label("• Your picks and alert settings are saved for next time.");
+
+    ui.add_space(14.0);
+    ui.heading("Troubleshooting");
+    ui.label(RichText::new("\"Can't find the game window\"").strong());
+    ui.label("Make sure the game is running. If you play in an emulator, pick its window under \"Game window\" on the Watch tab.");
+    ui.label(RichText::new("\"The game window looks blank\"").strong());
+    ui.label("Un-minimize the game. If it's on another virtual desktop, move it to the one you're using (behind other windows is fine).");
+    ui.label(RichText::new("A seed says \"Can't read its stock line\"").strong());
+    ui.label("Its row is probably cut off at the edge of the list. Scroll a little so the whole row shows. Making the game window bigger also helps.");
+    ui.label(RichText::new("Windows said \"Windows protected your PC\" when I opened the app").strong());
+    ui.label("That happens with apps that aren't from a big publisher. Click \"More info\", then \"Run anyway\".");
+    ui.label(RichText::new("\"English text recognition isn't installed\"").strong());
+    ui.label("Open Windows Settings > Time & language > Language & region, add English (United States), then restart the app.");
+}

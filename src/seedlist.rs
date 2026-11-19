@@ -64,3 +64,35 @@ pub fn download() -> Result<SeedList, String> {
     let _ = std::fs::write(dir.join("seeds.json"), &text);
     Ok(list)
 }
+
+/// True if version `a` (like "1.2.0") is newer than `b`.
+pub fn is_newer(a: &str, b: &str) -> bool {
+    let parts = |v: &str| -> Vec<u32> { v.trim().split('.').map(|p| p.trim().parse().unwrap_or(0)).collect() };
+    let (a, b) = (parts(a), parts(b));
+    for i in 0..a.len().max(b.len()) {
+        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn built_in_list_loads() {
+        assert!(built_in().seeds.contains(&"Baobab Tree Seed".to_string()));
+    }
+
+    #[test]
+    fn version_compare() {
+        assert!(is_newer("1.0.1", "1.0.0"));
+        assert!(is_newer("1.10.0", "1.9.3"));
+        assert!(!is_newer("1.0.0", "1.0.0"));
+        assert!(!is_newer("", "1.0.0"));
+        assert!(!is_newer("0.9", "1.0.0"));
+    }
+}

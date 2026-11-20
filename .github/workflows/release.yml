@@ -1,0 +1,65 @@
+# Push a tag like v1.0.1 and this builds the exe, publishes a GitHub release
+# with it attached, then sets "latest_app_version" in seeds.json so everyone's
+# app shows "A new version is available".
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match Cargo.toml version
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG doesn't match Cargo.toml version $version. Bump the version, commit, and tag again."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Publish release
+        run: |
+          cat > notes.md <<'EOF'
+          **Download `pt-seeds-watcher.exe` below and double-click it.** Nothing to install.
+
+          If Windows says "Windows protected your PC", click **More info**, then **Run anyway**.
+          The "How to use" tab in the app walks you through the rest.
+          EOF
+          gh release create "$TAG" target/release/pt-seeds-watcher.exe --title "$TAG" --notes-file notes.md
+
+      - name: Tell existing apps about the new version
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          sed -i -E "s/(\"latest_app_version\": *\")[^\"]*\"/\1$VERSION\"/" seeds.json
+          if git diff --quiet seeds.json; then
+            echo "seeds.json already says $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "latest version is now $VERSION"
+          git push origin main

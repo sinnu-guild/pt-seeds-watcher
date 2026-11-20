@@ -58,14 +58,27 @@ list without signing in.
 
 ### Releasing a new version
 
-1. Bump `version` in `Cargo.toml`.
-2. `cargo build --release` (from PowerShell) gives
-   `target\release\pt-seeds-watcher.exe`. It runs on its own: the C runtime
-   is built in ([.cargo/config.toml](.cargo/config.toml)), so players don't
-   need the Visual C++ Redistributable.
-3. Create a GitHub release and attach the exe.
-4. Set `"latest_app_version"` in `seeds.json` to the new version and push.
-   Older apps then show "A new version is available" with a download link.
+1. Bump `version` in `Cargo.toml` (e.g. `1.0.1`), run `cargo build` so
+   `Cargo.lock` updates too, then commit and push.
+2. Tag it and push the tag:
+   ```powershell
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+3. That's it. [The release workflow](.github/workflows/release.yml) builds
+   the exe on GitHub, publishes a release with it attached, then sets
+   `"latest_app_version"` in `seeds.json`, so older apps show "A new version
+   is available" with a download link. It takes about 10 minutes; watch it
+   under the repo's **Actions** tab. Pull afterwards (`git pull`) to get its
+   `seeds.json` commit.
+
+The tag must match the version in `Cargo.toml`, or the workflow stops
+without releasing anything. The exe runs on its own: the C runtime is built
+in ([.cargo/config.toml](.cargo/config.toml)), so players don't need the
+Visual C++ Redistributable.
+
+To build it locally instead: `cargo build --release` gives
+`target\release\pt-seeds-watcher.exe`.
 
 ### Testing without the app window
 

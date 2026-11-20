@@ -60,7 +60,9 @@ list without signing in.
 
 1. Bump `version` in `Cargo.toml`.
 2. `cargo build --release` (from PowerShell) gives
-   `target\release\pt-seeds-watcher.exe`.
+   `target\release\pt-seeds-watcher.exe`. It runs on its own: the C runtime
+   is built in ([.cargo/config.toml](.cargo/config.toml)), so players don't
+   need the Visual C++ Redistributable.
 3. Create a GitHub release and attach the exe.
 4. Set `"latest_app_version"` in `seeds.json` to the new version and push.
    Older apps then show "A new version is available" with a download link.

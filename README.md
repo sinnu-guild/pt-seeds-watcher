@@ -97,3 +97,8 @@ it found. This runs the same code as the app's **Check now** button.
 - [src/app.rs](src/app.rs) is the window (egui);
   [src/seedlist.rs](src/seedlist.rs) downloads the seed list;
   settings are saved in `%APPDATA%\pt-seeds-watcher\`.
+
+## Support
+
+The app is free. If it helped you get your seeds, you can buy me a coffee on
+[Ko-fi](https://ko-fi.com/wasaque).

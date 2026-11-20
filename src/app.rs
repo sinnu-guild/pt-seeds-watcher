@@ -16,6 +16,7 @@ use crate::watcher::{self, Check, Live};
 
 pub const APP_NAME: &str = "PT Seed Watcher";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const KOFI_URL: &str = "https://ko-fi.com/wasaque";
 
 const GREEN: Color32 = Color32::from_rgb(40, 170, 80);
 const ORANGE: Color32 = Color32::from_rgb(230, 140, 40);
@@ -188,6 +189,8 @@ impl App {
             ui.selectable_value(&mut self.tab, Tab::Alerts, RichText::new("Alerts").size(16.0));
             ui.selectable_value(&mut self.tab, Tab::Guide, RichText::new("How to use").size(16.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.hyperlink_to("☕ Support me on Ko-fi", KOFI_URL);
+                ui.add_space(12.0);
                 let (text, tip) = match self.list_source {
                     Source::Online => ("Seed list: up to date", "Downloaded just now."),
                     Source::Saved => ("Seed list: saved copy", "Couldn't download the latest list; using the last one."),
@@ -669,4 +672,11 @@ fn guide(ui: &mut egui::Ui) {
     ui.label("That happens with apps that aren't from a big publisher. Click \"More info\", then \"Run anyway\".");
     ui.label(RichText::new("\"English text recognition isn't installed\"").strong());
     ui.label("Open Windows Settings > Time & language > Language & region, add English (United States), then restart the app.");
+
+    ui.add_space(14.0);
+    ui.heading("Like the app?");
+    ui.horizontal_wrapped(|ui| {
+        ui.label("It's free. If it helped you get your seeds, you can buy me a coffee:");
+        ui.hyperlink_to("☕ ko-fi.com/wasaque", KOFI_URL);
+    });
 }

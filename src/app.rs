@@ -353,9 +353,6 @@ impl App {
                     self.start(ctx);
                 }
             }
-            if self.stop.is_some() && !running {
-                self.stop = None;
-            }
         });
         if running && self.running_settings.as_ref() != Some(&self.settings) {
             ui.label(RichText::new("You changed something. Stop and start again to use the changes.").color(ORANGE));
@@ -670,6 +667,8 @@ fn guide(ui: &mut egui::Ui) {
     ui.label("Its row is probably cut off at the edge of the list. Scroll a little so the whole row shows. Making the game window bigger also helps.");
     ui.label(RichText::new("Windows said \"Windows protected your PC\" when I opened the app").strong());
     ui.label("That happens with apps that aren't from a big publisher. Click \"More info\", then \"Run anyway\".");
+    ui.label(RichText::new("I hear the alert sound, but no Windows notification shows up").strong());
+    ui.label("Windows hides notifications while you play a game or use Do not disturb (they still go to the notification list, Win+N). To let them through: Windows Settings > System > Notifications > Set priority notifications > Add apps > PT Seed Watcher. Phone alerts (ntfy) always come through.");
     ui.label(RichText::new("\"English text recognition isn't installed\"").strong());
     ui.label("Open Windows Settings > Time & language > Language & region, add English (United States), then restart the app.");
 

@@ -23,8 +23,14 @@ const ICON: &[u8] = include_bytes!("../assets/icon.png");
 
 fn main() {
     capture::init_dpi();
+    // Not fatal: without it, alerts still play the sound and reach phone/Discord.
+    let _ = notify::register(ICON);
 
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("test-alert") {
+        attach_console();
+        std::process::exit(cmd_test_alert());
+    }
     if let [cmd, path] = args.as_slice() {
         if cmd == "check" {
             attach_console();
@@ -66,6 +72,36 @@ fn attach_console() {
     use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+/// For troubleshooting, `pt-seeds-watcher.exe test-alert`: shows a Windows
+/// notification from a watcher-like thread and says how long it took. Only
+/// the Windows notification: it doesn't post to ntfy or Discord.
+fn cmd_test_alert() -> i32 {
+    if let Err(e) = notify::register(ICON) {
+        eprintln!("{e}");
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        ocr::init_thread();
+        let started = std::time::Instant::now();
+        let result = notify::desktop(watcher::ALERT_TITLE, "Test alert from the command line.");
+        let _ = tx.send((result, started.elapsed()));
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(15)) {
+        Ok((Ok(()), took)) => {
+            println!("Windows notification sent in {} ms. Did it show up?", took.as_millis());
+            0
+        }
+        Ok((Err(e), took)) => {
+            eprintln!("Windows notification failed after {} ms: {e}", took.as_millis());
+            1
+        }
+        Err(_) => {
+            eprintln!("Windows notification is stuck: no answer after 15 s.");
+            2
+        }
     }
 }
 

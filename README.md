@@ -15,8 +15,6 @@ touches the game's files or memory.
 1. Download `pt-seeds-watcher.exe` from the
    [latest release](https://github.com/sinnu-guild/pt-seeds-watcher/releases/latest).
 2. Double-click it. Nothing to install.
-3. If Windows says **"Windows protected your PC"**, click **More info**, then
-   **Run anyway**. This shows up for apps that aren't from a big publisher.
 
 The **How to use** tab in the app walks you through the rest.
 
@@ -34,6 +32,16 @@ The **How to use** tab in the app walks you through the rest.
 On the **Alerts** tab, click **Make a topic**, install the free **ntfy** app
 on your phone, and subscribe to the same topic name. Use **Send a test alert**
 to check it works. You can also paste a Discord webhook URL there.
+
+## A blue Windows box came up the first time?
+
+That's Windows SmartScreen. It shows up for new apps from small, indie
+developers that haven't paid for a code-signing certificate, not because
+anything is wrong with the app. Click **More info**, then **Run anyway**. You
+only see it once.
+
+The full source code is right here in this repo if you want to check what the
+app does.
 
 ---
 

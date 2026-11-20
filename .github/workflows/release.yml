@@ -43,10 +43,12 @@ jobs:
       - name: Publish release
         run: |
           cat > notes.md <<'EOF'
-          **Download `pt-seeds-watcher.exe` below and double-click it.** Nothing to install.
+          Play Together Seed Watcher for PC. Get notified when the seeds you want are in stock.
 
-          If Windows says "Windows protected your PC", click **More info**, then **Run anyway**.
+          **Download `pt-seeds-watcher.exe` below and double-click it.** Nothing to install.
           The "How to use" tab in the app walks you through the rest.
+
+          <sub>The first time you run it, Windows might show a blue "Windows protected your PC" box. That's normal for new apps from small, indie developers without a paid code-signing certificate. Click **More info**, then **Run anyway**. You only see it once.</sub>
           EOF
           gh release create "$TAG" target/release/pt-seeds-watcher.exe --title "$TAG" --notes-file notes.md
 

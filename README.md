@@ -87,8 +87,11 @@ it found. This runs the same code as the app's **Check now** button.
   it. Only "Stock: N" counts as in stock. "Out of Stock", or a missing or
   unreadable line (for example a row cut off at the bottom of the list), never
   alerts.
-- [src/watcher.rs](src/watcher.rs) checks every few seconds, alerts once per
-  restock, and says so if it can't see your seeds for about a minute.
+- [src/watcher.rs](src/watcher.rs) checks 7 seconds after each restock
+  (the shop restocks every 5 minutes on the clock), retries a few times if
+  the read was unclear, alerts once per restock, and says so if it can't see
+  your seeds at a restock. "Every N seconds" is kept as a backup for PCs
+  whose clock is off.
 - [src/app.rs](src/app.rs) is the window (egui);
   [src/seedlist.rs](src/seedlist.rs) downloads the seed list;
   settings are saved in `%APPDATA%\pt-seeds-watcher\`.

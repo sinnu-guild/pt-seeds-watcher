@@ -304,6 +304,14 @@ pub fn now_hms() -> String {
     format!("{:02}:{:02}:{:02}", t.wHour, t.wMinute, t.wSecond)
 }
 
+/// Local time `secs` seconds from now, as HH:MM:SS.
+pub fn local_hms_in(secs: u64) -> String {
+    let mut t = SYSTEMTIME::default();
+    unsafe { GetLocalTime(&mut t) };
+    let of_day = (t.wHour as u64 * 3600 + t.wMinute as u64 * 60 + t.wSecond as u64 + secs) % 86_400;
+    format!("{:02}:{:02}:{:02}", of_day / 3600, of_day / 60 % 60, of_day % 60)
+}
+
 /// Plays the Windows "exclamation" sound.
 pub fn beep() {
     unsafe {

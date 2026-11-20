@@ -299,9 +299,23 @@ impl App {
                 self.windows = window_titles();
             }
         });
+        ui.label("When to check:");
         ui.horizontal(|ui| {
-            ui.label("Check every");
-            ui.add(egui::Slider::new(&mut self.settings.check_every_secs, 10..=120).suffix(" s"));
+            ui.radio_value(&mut self.settings.follow_restock, true, "Right after each restock (every 5 min)")
+                .on_hover_text("The shop restocks at :00, :05, :10 and so on. The app looks a few seconds after.");
+            ui.add_enabled(
+                self.settings.follow_restock,
+                egui::DragValue::new(&mut self.settings.restock_delay_secs).range(0..=60).prefix("+").suffix(" s"),
+            )
+            .on_hover_text("Seconds to wait after the restock, so the shop has updated");
+        });
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.settings.follow_restock, false, "Every")
+                .on_hover_text("Use this if your PC clock is off and the restock checks come too early or late");
+            ui.add_enabled(
+                !self.settings.follow_restock,
+                egui::Slider::new(&mut self.settings.check_every_secs, 10..=120).suffix(" s"),
+            );
         });
         ui.horizontal(|ui| {
             let busy = self.check_rx.is_some();
@@ -360,6 +374,9 @@ impl App {
             ui.horizontal(|ui| {
                 if let Some(t) = &live.last_check {
                     ui.label(RichText::new(format!("Last checked {t}")).weak());
+                }
+                if let Some(t) = &live.next_check {
+                    ui.label(RichText::new(format!("· Next check {t}")).weak());
                 }
                 if let Some(d) = &live.next_deal {
                     ui.label(RichText::new(format!("· Shop restocks in about {d}")).weak());
@@ -629,8 +646,8 @@ fn guide(ui: &mut egui::Ui) {
     step(ui, "1. Pick your seeds", "On the Watch tab, tick the seeds you want. If one is missing from the list, type its name exactly as the shop shows it and click Add.");
     step(ui, "2. Open the seed shop in the game", "Open the seed shop and scroll its list so the seeds you picked are showing. The app can only see what's on screen, so it can't check seeds you have to scroll to.");
     step(ui, "3. Click \"Check now\"", "The app looks at the game once and shows you what it saw, with a box around each seed it found. Each picked seed should say \"Out of stock\" or \"IN STOCK\". \"Not on screen\" means it couldn't find that seed: scroll the shop list or check the game window setting.");
-    step(ui, "4. Click \"Start watching\"", "The app checks every 20 seconds. When a picked seed comes into stock, you get an alert. It won't repeat the alert for the same restock.");
-    step(ui, "5. Leave the game open", "You can put other windows on top of the game, but don't minimize it: Windows stops drawing minimized windows and the app goes blind. If it can't see your seeds for about a minute, it tells you.");
+    step(ui, "4. Click \"Start watching\"", "The app checks right after each restock (every 5 minutes, at :00, :05, :10 and so on, plus a few seconds). When a picked seed is in stock, you get an alert. It won't repeat the alert for the same restock. If your PC clock is off, switch \"When to check\" to \"Every ... s\".");
+    step(ui, "5. Leave the game open", "You can put other windows on top of the game, but don't minimize it: Windows stops drawing minimized windows and the app goes blind. If it can't see your seeds at a restock, it tells you.");
     step(ui, "Optional: alerts on your phone", "On the Alerts tab, set up the free ntfy app to get alerts on your phone, or paste a Discord webhook. Use \"Send a test alert\" to try it.");
 
     ui.add_space(14.0);

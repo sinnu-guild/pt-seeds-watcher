@@ -13,6 +13,12 @@ pub struct Settings {
     pub custom_seeds: Vec<String>,
     /// Title of the game window. Empty = find "Play Together" automatically.
     pub window_title: String,
+    /// Check right after each restock (every 5 minutes) instead of every
+    /// `check_every_secs`.
+    pub follow_restock: bool,
+    /// How long after the restock to look, so the shop has time to update.
+    pub restock_delay_secs: u64,
+    /// Backup for PCs whose clock is off.
     pub check_every_secs: u64,
     pub alerts: Alerts,
 }
@@ -23,6 +29,8 @@ impl Default for Settings {
             picked: Vec::new(),
             custom_seeds: Vec::new(),
             window_title: String::new(),
+            follow_restock: true,
+            restock_delay_secs: 7,
             check_every_secs: 20,
             alerts: Alerts::default(),
         }

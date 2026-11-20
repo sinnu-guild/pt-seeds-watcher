@@ -13,7 +13,7 @@ touches the game's files or memory.
 ## Download and run
 
 1. Download `pt-seeds-watcher.exe` from the
-   [latest release](https://github.com/dthrcrpz/pt-seeds-watcher/releases/latest).
+   [latest release](https://github.com/sinnu-guild/pt-seeds-watcher/releases/latest).
 2. Double-click it. Nothing to install.
 3. If Windows says **"Windows protected your PC"**, click **More info**, then
    **Run anyway**. This shows up for apps that aren't from a big publisher.

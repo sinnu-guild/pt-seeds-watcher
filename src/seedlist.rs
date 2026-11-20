@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::settings::data_dir;
 
 /// Where the list lives. Edit seeds.json in the repo and push to update everyone.
-pub const URL: &str = "https://raw.githubusercontent.com/dthrcrpz/pt-seeds-watcher/main/seeds.json";
+pub const URL: &str = "https://raw.githubusercontent.com/sinnu-guild/pt-seeds-watcher/main/seeds.json";
 
 const BUILT_IN: &str = include_str!("../seeds.json");
 

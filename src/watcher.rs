@@ -102,6 +102,7 @@ pub fn start(
     }
     std::thread::spawn(move || {
         ocr::init_thread();
+        background_priority();
         watch_loop(&settings, &known, &live, &stop_flag, &repaint);
         {
             let mut l = live.lock().unwrap();
@@ -112,6 +113,15 @@ pub fn start(
         repaint();
     });
     stop
+}
+
+/// Puts the current thread in Windows' background mode (lower CPU, disk and
+/// memory priority), so checks never take time away from a game.
+fn background_priority() {
+    use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN};
+    unsafe {
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+    }
 }
 
 /// The shop restocks on the clock every 5 minutes (:00, :05, :10, ...).

@@ -44,6 +44,15 @@ fn main() {
         }
     }
 
+    // OpenGL needs far less video memory than DirectX 12 (wgpu), which
+    // matters next to a game on low-end PCs. If OpenGL won't start (no proper
+    // graphics driver), fall back to wgpu.
+    if run_app(eframe::Renderer::Glow).is_err() {
+        let _ = run_app(eframe::Renderer::Wgpu);
+    }
+}
+
+fn run_app(renderer: eframe::Renderer) -> eframe::Result {
     let icon = image::load_from_memory(ICON).map(|i| i.to_rgba8()).ok();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(app::APP_NAME)
@@ -58,13 +67,14 @@ fn main() {
     }
     let options = eframe::NativeOptions {
         viewport,
+        renderer,
         ..Default::default()
     };
-    let _ = eframe::run_native(
+    eframe::run_native(
         app::APP_NAME,
         options,
         Box::new(|cc| Ok(Box::new(app::App::new(&cc.egui_ctx)))),
-    );
+    )
 }
 
 /// Lets `check` print to the terminal it was started from.

@@ -10,7 +10,8 @@ serde_json = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ureq = "2"
 notify-rust = "4"
-eframe = "0.37"
+# OpenGL (glow) is the light renderer we use; wgpu stays as a fallback.
+eframe = { version = "0.37", features = ["glow"] }
 windows = { version = "0.62", features = [
     "Foundation",
     "Foundation_Collections",
@@ -22,6 +23,7 @@ windows = { version = "0.62", features = [
     "Win32_System_WinRT",
     "Win32_System_Console",
     "Win32_System_Registry",
+    "Win32_System_Threading",
 ] }
 
 [build-dependencies]

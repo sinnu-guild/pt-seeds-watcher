@@ -106,21 +106,27 @@ pub fn read(frame: &Frame) -> Result<Vec<Line>, String> {
         return Err(format!("the game window is too big to read ({}x{})", frame.width, frame.height));
     }
 
+    let (width, height) = gray.dimensions();
     let mut bgra = Vec::with_capacity(gray.len() * 4);
     for p in gray.pixels() {
         let v = p.0[0];
         bgra.extend_from_slice(&[v, v, v, 255]);
     }
+    // Free each copy as soon as the next one exists, to keep the memory spike
+    // per check small on low-end PCs.
+    drop(gray);
     let err = |e: windows::core::Error| format!("text recognition failed: {e}");
     let buffer = CryptographicBuffer::CreateFromByteArray(&bgra).map_err(err)?;
+    drop(bgra);
     let bitmap = SoftwareBitmap::CreateCopyWithAlphaFromBuffer(
         &buffer,
         BitmapPixelFormat::Bgra8,
-        gray.width() as i32,
-        gray.height() as i32,
+        width as i32,
+        height as i32,
         BitmapAlphaMode::Premultiplied,
     )
     .map_err(err)?;
+    drop(buffer);
     let result = engine.RecognizeAsync(&bitmap).map_err(err)?.join().map_err(err)?;
 
     let mut out = Vec::new();

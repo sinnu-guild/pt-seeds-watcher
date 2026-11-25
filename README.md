@@ -123,6 +123,25 @@ it found. This runs the same code as the app's **Check now** button.
   [src/seedlist.rs](src/seedlist.rs) downloads the seed list;
   settings are saved in `%APPDATA%\pt-seeds-watcher\`.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: wasaque
+- Approvers: wasaque
+
+Only exes built from this repo by its GitHub release workflow get signed.
+
+**Privacy:** each time it starts, the app downloads the seed list
+([seeds.json](seeds.json)) from this GitHub repo. It sends alerts to ntfy or
+Discord only if you set them up on the **Alerts** tab. It doesn't send
+anything else anywhere.
+
+## License
+
+[MIT](LICENSE)
+
 ## Support
 
 The app is free. If it helped you get your seeds, you can buy me a coffee on

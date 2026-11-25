@@ -1,9 +1,8 @@
 //! Reading text off the game window with Windows' built-in text recognition
 //! (`Windows.Media.Ocr`, part of Windows 10 and 11).
 //!
-//! Only the left half of the window is read: that's where the shop's seed
-//! list is. The right half shows the selected seed's details, whose name
-//! would otherwise look like a list row.
+//! The whole window is read: the shop's seed list is in the left half, the
+//! selected seed's details in the right half.
 //!
 //! The picture is turned gray, its contrast stretched (the "Out of Stock"
 //! text is pale orange on cream) and scaled so the window is about 2160
@@ -51,10 +50,9 @@ fn engine() -> Result<OcrEngine, String> {
         })
 }
 
-/// The left half of the frame, gray, contrast-stretched and scaled up.
+/// The frame, gray, contrast-stretched and scaled up.
 fn prepare(frame: &Frame) -> (GrayImage, f32) {
-    let half_w = (frame.width / 2).max(1);
-    let mut gray = GrayImage::new(half_w, frame.height);
+    let mut gray = GrayImage::new(frame.width, frame.height);
     for (x, y, px) in gray.enumerate_pixels_mut() {
         let i = ((y * frame.width + x) * 4) as usize;
         let p = &frame.rgba[i..i + 3];
@@ -63,7 +61,7 @@ fn prepare(frame: &Frame) -> (GrayImage, f32) {
     stretch_contrast(&mut gray);
     let scale = (WORK_HEIGHT / frame.height as f32).clamp(1.0, 4.0);
     if scale > 1.0 {
-        let (w, h) = ((half_w as f32 * scale) as u32, (frame.height as f32 * scale) as u32);
+        let (w, h) = ((frame.width as f32 * scale) as u32, (frame.height as f32 * scale) as u32);
         gray = imageops::resize(&gray, w, h, imageops::FilterType::Lanczos3);
     }
     (gray, scale)
@@ -97,7 +95,7 @@ fn stretch_contrast(img: &mut GrayImage) {
     }
 }
 
-/// Reads the text in the seed-list half of the frame.
+/// Reads the text in the frame.
 pub fn read(frame: &Frame) -> Result<Vec<Line>, String> {
     let (gray, scale) = prepare(frame);
     let engine = engine()?;

@@ -35,7 +35,8 @@ struct Preview {
     time: String,
     shop_open: bool,
     next_deal: Option<String>,
-    seeds: Vec<(String, Status)>,
+    /// (name, status, read from the right panel)
+    seeds: Vec<(String, Status, bool)>,
 }
 
 pub struct App {
@@ -285,6 +286,7 @@ impl App {
 
         ui.heading("2. Set up the game");
         ui.label("Open the seed shop and scroll the list so your seeds show. Leave the game open (it can be behind other windows, but not minimized).");
+        ui.label("Tip: click one more seed in the shop so it shows on the right. The app reads that too, even if it's scrolled out of the list.");
         ui.horizontal(|ui| {
             ui.label("Game window:");
             let shown = if self.settings.window_title.is_empty() {
@@ -365,9 +367,9 @@ impl App {
                 ui.label(RichText::new(format!("⚠ {p}")).color(RED));
             }
             egui::Grid::new("status").striped(true).num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
-                for (name, status) in &live.seeds {
+                for (name, status, in_panel) in &live.seeds {
                     ui.label(RichText::new(name).size(15.0));
-                    ui.label(status_text(*status).size(15.0));
+                    ui.label(status_text(*status, *in_panel).size(15.0));
                     ui.end_row();
                 }
             });
@@ -407,10 +409,10 @@ impl App {
         if p.seeds.is_empty() {
             ui.label("Pick some seeds to see their status here.");
         }
-        for (name, status) in &p.seeds {
+        for (name, status, in_panel) in &p.seeds {
             ui.horizontal(|ui| {
                 ui.label(name);
-                ui.label(status_text(*status));
+                ui.label(status_text(*status, *in_panel));
             });
         }
         if let Some(d) = &p.next_deal {
@@ -420,7 +422,7 @@ impl App {
         let h = w * p.size[1] as f32 / p.size[0] as f32;
         ui.add(egui::Image::new(egui::load::SizedTexture::new(p.texture.id(), [w, h])));
         ui.label(
-            RichText::new("Boxes: green = in stock, orange = out of stock, red = stock line not readable, gray = other seeds. The right half (shaded) is ignored.")
+            RichText::new("Boxes: green = in stock, orange = out of stock, red = stock line not readable, gray = other seeds.")
                 .weak()
                 .size(12.0),
         );
@@ -514,8 +516,9 @@ impl Drop for App {
     }
 }
 
-fn status_text(s: Status) -> RichText {
-    let t = RichText::new(s.describe());
+fn status_text(s: Status, in_panel: bool) -> RichText {
+    let place = if in_panel { " · right panel" } else { "" };
+    let t = RichText::new(format!("{}{place}", s.describe()));
     match s {
         Status::InStock(_) => t.color(GREEN).strong(),
         Status::OutOfStock => t.color(ORANGE),
@@ -569,24 +572,14 @@ fn make_preview(ctx: &egui::Context, c: &Check) -> Preview {
         time: c.time.clone(),
         shop_open: c.view.shop_open,
         next_deal: c.view.next_deal.clone(),
-        seeds: c.view.seeds.iter().map(|s| (s.name.clone(), s.status)).collect(),
+        seeds: c.view.seeds.iter().map(|s| (s.name.clone(), s.status, s.in_panel)).collect(),
     }
 }
 
-/// The captured picture (RGBA) with boxes on what was read and the ignored
-/// right half shaded.
+/// The captured picture (RGBA) with boxes on what was read.
 pub fn annotate(c: &Check) -> Vec<u8> {
     let (w, h) = (c.frame.width as usize, c.frame.height as usize);
     let mut rgba = c.frame.rgba.clone();
-    // Shade the ignored right half.
-    for y in 0..h {
-        for x in w / 2..w {
-            let i = (y * w + x) * 4;
-            for k in 0..3 {
-                rgba[i + k] /= 3;
-            }
-        }
-    }
     let mut boxed = |i: usize, color: [u8; 3]| {
         let l = &c.lines[i];
         let pad = 4.0;
@@ -644,7 +637,7 @@ fn guide(ui: &mut egui::Ui) {
     ui.label("It watches the seed shop for you and alerts you when a seed you want is in stock, so you don't have to keep checking.");
 
     step(ui, "1. Pick your seeds", "On the Watch tab, tick the seeds you want. If one is missing from the list, type its name exactly as the shop shows it and click Add.");
-    step(ui, "2. Open the seed shop in the game", "Open the seed shop and scroll its list so the seeds you picked are showing. The app can only see what's on screen, so it can't check seeds you have to scroll to.");
+    step(ui, "2. Open the seed shop in the game", "Open the seed shop and scroll its list so the seeds you picked are showing. The app can only see what's on screen, so it can't check seeds you have to scroll to. Tip: click one more seed in the shop so it shows on the right; the app reads that too, so you can watch one seed that's scrolled out of the list.");
     step(ui, "3. Click \"Check now\"", "The app looks at the game once and shows you what it saw, with a box around each seed it found. Each picked seed should say \"Out of stock\" or \"IN STOCK\". \"Not on screen\" means it couldn't find that seed: scroll the shop list or check the game window setting.");
     step(ui, "4. Click \"Start watching\"", "The app checks right after each restock (every 5 minutes, at :00, :05, :10 and so on, plus a few seconds). When a picked seed is in stock, you get an alert. It won't repeat the alert for the same restock. If your PC clock is off, switch \"When to check\" to \"Every ... s\".");
     step(ui, "5. Leave the game open", "You can put other windows on top of the game, but don't minimize it: Windows stops drawing minimized windows and the app goes blind. If it can't see your seeds at a restock, it tells you.");

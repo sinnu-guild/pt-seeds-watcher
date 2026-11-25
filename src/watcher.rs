@@ -35,7 +35,7 @@ pub fn check_once(window: &str, known: &[String], wanted: &[String]) -> Result<C
             .into());
     }
     let lines = ocr::read(&frame)?;
-    let view = shop::read_shop(&lines, known, wanted);
+    let view = shop::read_shop(&lines, frame.width as f32, known, wanted);
     Ok(Check {
         time: capture::now_hms(),
         frame,
@@ -66,8 +66,9 @@ pub struct Live {
     pub last_check: Option<String>,
     /// When the next check happens (local HH:MM:SS).
     pub next_check: Option<String>,
-    /// Latest status per watched seed.
-    pub seeds: Vec<(String, Status)>,
+    /// Latest status per watched seed, and whether it was read from the
+    /// selected-seed panel.
+    pub seeds: Vec<(String, Status, bool)>,
     pub next_deal: Option<String>,
     /// Why the last check didn't work, or what the player should fix.
     pub problem: Option<String>,
@@ -97,7 +98,7 @@ pub fn start(
         let mut l = live.lock().unwrap();
         l.running = true;
         l.problem = None;
-        l.seeds = settings.picked.iter().map(|s| (s.clone(), Status::NotVisible)).collect();
+        l.seeds = settings.picked.iter().map(|s| (s.clone(), Status::NotVisible, false)).collect();
         l.log(format!("Started watching: {}", settings.picked.join(", ")));
     }
     std::thread::spawn(move || {
@@ -205,7 +206,9 @@ impl Tracker<'_> {
         let problem = match &result {
             Err(e) => Some(e.clone()),
             Ok(c) if c.view.seeds.iter().all(|s| s.status == Status::NotVisible) => Some(if c.view.shop_open {
-                "The seed shop is open, but none of your seeds are in view. Scroll the list so they show.".to_string()
+                "The seed shop is open, but none of your seeds are in view. Scroll the list so they show, or click \
+                 one so it shows on the right."
+                    .to_string()
             } else {
                 "Can't see the seed shop. Open it in the game and leave it open.".to_string()
             }),
@@ -241,11 +244,12 @@ impl Tracker<'_> {
                         }
                     }
                     if self.last[i] != Some(seed.status) {
-                        l.log(format!("{}: {}", seed.name, seed.status.describe()));
+                        let place = if seed.in_panel { " (right panel)" } else { "" };
+                        l.log(format!("{}: {}{place}", seed.name, seed.status.describe()));
                         self.last[i] = Some(seed.status);
                     }
                 }
-                l.seeds = c.view.seeds.iter().map(|s| (s.name.clone(), s.status)).collect();
+                l.seeds = c.view.seeds.iter().map(|s| (s.name.clone(), s.status, s.in_panel)).collect();
             }
             if problem != l.problem {
                 match &problem {

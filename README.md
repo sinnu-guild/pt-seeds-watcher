@@ -24,7 +24,9 @@ The **How to use** tab in the app walks you through the rest.
   an emulator).
 - The game set to **English**.
 - The seed shop open, with your seeds visible in its list. The app can only
-  check seeds that are on screen, so scroll the list to show them.
+  check seeds that are on screen, so scroll the list to show them. It also
+  reads the seed shown on the right (the one you clicked), so you can watch
+  one more seed that's scrolled out of the list.
 - The game not minimized. Other windows on top of it are fine.
 
 ## Phone alerts
@@ -103,11 +105,13 @@ it found. This runs the same code as the app's **Check now** button.
 
 - [src/capture.rs](src/capture.rs) takes a picture of the game window
   (`PrintWindow`, works when covered, not when minimized).
-- [src/ocr.rs](src/ocr.rs) reads the left half of it (the seed list) with
-  Windows' built-in text recognition, after making it gray, boosting the
-  contrast and scaling it to 2160 pixels tall.
-- [src/shop.rs](src/shop.rs) finds each seed's name and reads the line under
-  it. Only "Stock: N" counts as in stock. "Out of Stock", or a missing or
+- [src/ocr.rs](src/ocr.rs) reads it with Windows' built-in text recognition,
+  after making it gray, boosting the contrast and scaling it to 2160 pixels
+  tall.
+- [src/shop.rs](src/shop.rs) finds each seed's name in the list (left half)
+  and reads the line under it. It also reads the selected seed on the right:
+  its name at the top and the "Stock: N" or gray "Out of Stock" button below.
+  Only "Stock: N" counts as in stock. "Out of Stock", or a missing or
   unreadable line (for example a row cut off at the bottom of the list), never
   alerts.
 - [src/watcher.rs](src/watcher.rs) checks 7 seconds after each restock

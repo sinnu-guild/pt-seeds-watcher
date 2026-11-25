@@ -4,6 +4,11 @@
 //! "Out of Stock" or "Stock: N". A seed only counts as in stock when its name
 //! is read AND the line under it reads "Stock: N", so a row cut off at the
 //! bottom of the list, or a misread line, never causes an alert.
+//!
+//! The right half of the shop shows the selected seed: its name at the top
+//! and, further down, "Stock: N" above the buy buttons, or a gray
+//! "Out of Stock" button. It stays selected across restocks, so it lets one
+//! more seed be watched than fit in the list.
 
 use crate::ocr::Line;
 
@@ -36,6 +41,8 @@ pub struct SeedView {
     /// Index into the lines of the seed's name and of the line under it.
     pub name_line: Option<usize>,
     pub stock_line: Option<usize>,
+    /// Read from the selected-seed panel on the right, not the list.
+    pub in_panel: bool,
 }
 
 pub struct ShopView {
@@ -165,13 +172,16 @@ fn next_deal(text: &str) -> Option<String> {
     (!fixed.is_empty()).then(|| fixed.join(" "))
 }
 
-/// Reads the shop. `known` is every seed name we know of (so one seed's name
-/// isn't mistaken for a similar one); `wanted` are the seeds to report on.
-pub fn read_shop(lines: &[Line], known: &[String], wanted: &[String]) -> ShopView {
+/// Reads the shop. `width` is the game window's width: the list is in its
+/// left half, the selected seed in its right half. `known` is every seed name
+/// we know of (so one seed's name isn't mistaken for a similar one); `wanted`
+/// are the seeds to report on.
+pub fn read_shop(lines: &[Line], width: f32, known: &[String], wanted: &[String]) -> ShopView {
     let mut all: Vec<(&str, String)> = known.iter().chain(wanted).map(|n| (n.as_str(), normalize(n))).collect();
     all.sort_by(|a, b| a.0.cmp(b.0));
     all.dedup_by(|a, b| a.0 == b.0);
 
+    let mid = width / 2.0;
     let names: Vec<(usize, String)> = lines
         .iter()
         .enumerate()
@@ -183,36 +193,27 @@ pub fn read_shop(lines: &[Line], known: &[String], wanted: &[String]) -> ShopVie
         classify(&l.text).is_some() || n.contains("untilnextdeal") || n.contains("restock")
     });
 
+    let panel = read_panel(lines, mid, &names);
     let seeds = wanted
         .iter()
         .map(|want| {
-            let Some(&(ni, _)) = names.iter().find(|(_, n)| n == want) else {
-                return SeedView {
-                    name: want.clone(),
-                    status: Status::NotVisible,
-                    name_line: None,
-                    stock_line: None,
-                };
-            };
-            let name = &lines[ni];
-            // The line just under the name, starting about where it starts.
-            let below = lines
-                .iter()
-                .enumerate()
-                .filter(|(i, l)| {
-                    *i != ni
-                        && l.y > name.y + 0.5 * name.h
-                        && l.y < name.y + 2.5 * name.h
-                        && (l.x - name.x).abs() < 1.5 * name.h
-                })
-                .min_by(|a, b| a.1.y.total_cmp(&b.1.y))
-                .map(|(i, _)| i);
-            let status = below.and_then(|i| classify(&lines[i].text)).unwrap_or(Status::Unknown);
-            SeedView {
-                name: want.clone(),
-                status,
-                name_line: Some(ni),
-                stock_line: below,
+            let row = read_list_row(lines, mid, &names, want);
+            match &panel {
+                // The list wins, unless it couldn't tell and the panel can.
+                Some(p)
+                    if p.name == *want
+                        && (row.status == Status::NotVisible
+                            || (row.status == Status::Unknown && p.status != Status::Unknown)) =>
+                {
+                    SeedView {
+                        name: want.clone(),
+                        status: p.status,
+                        name_line: p.name_line,
+                        stock_line: p.stock_line,
+                        in_panel: true,
+                    }
+                }
+                _ => row,
             }
         })
         .collect();
@@ -223,6 +224,63 @@ pub fn read_shop(lines: &[Line], known: &[String], wanted: &[String]) -> ShopVie
         seeds,
         names,
     }
+}
+
+/// A seed's row in the list (left of `mid`): its name and the line under it.
+fn read_list_row(lines: &[Line], mid: f32, names: &[(usize, String)], want: &str) -> SeedView {
+    let Some(&(ni, _)) = names.iter().find(|(i, n)| n == want && lines[*i].x < mid) else {
+        return SeedView {
+            name: want.to_string(),
+            status: Status::NotVisible,
+            name_line: None,
+            stock_line: None,
+            in_panel: false,
+        };
+    };
+    let name = &lines[ni];
+    // The line just under the name, starting about where it starts.
+    let below = lines
+        .iter()
+        .enumerate()
+        .filter(|(i, l)| {
+            *i != ni
+                && l.y > name.y + 0.5 * name.h
+                && l.y < name.y + 2.5 * name.h
+                && (l.x - name.x).abs() < 1.5 * name.h
+        })
+        .min_by(|a, b| a.1.y.total_cmp(&b.1.y))
+        .map(|(i, _)| i);
+    SeedView {
+        name: want.to_string(),
+        status: below.and_then(|i| classify(&lines[i].text)).unwrap_or(Status::Unknown),
+        name_line: Some(ni),
+        stock_line: below,
+        in_panel: false,
+    }
+}
+
+/// The selected seed, right of `mid`: the topmost seed name there, and the
+/// nearest "Stock: N" or "Out of Stock" (the gray buy button) below it. The
+/// description, prices and "Send Gift" in between match neither.
+fn read_panel(lines: &[Line], mid: f32, names: &[(usize, String)]) -> Option<SeedView> {
+    let (ti, name) = names
+        .iter()
+        .filter(|(i, _)| lines[*i].x >= mid)
+        .min_by(|a, b| lines[a.0].y.total_cmp(&lines[b.0].y))?;
+    let title = &lines[*ti];
+    let stock = lines
+        .iter()
+        .enumerate()
+        .filter(|(i, l)| i != ti && l.x >= mid && l.y > title.y + 0.5 * title.h)
+        .filter_map(|(i, l)| classify(&l.text).map(|s| (i, l.y, s)))
+        .min_by(|a, b| a.1.total_cmp(&b.1));
+    Some(SeedView {
+        name: name.clone(),
+        status: stock.map_or(Status::Unknown, |(_, _, s)| s),
+        name_line: Some(*ti),
+        stock_line: stock.map(|(i, _, _)| i),
+        in_panel: true,
+    })
 }
 
 #[cfg(test)]
@@ -264,12 +322,12 @@ mod tests {
 
     fn statuses(lines: &[Line], wanted: &[&str]) -> Vec<Status> {
         let wanted: Vec<String> = wanted.iter().map(|s| s.to_string()).collect();
-        read_shop(lines, &known(), &wanted).seeds.iter().map(|s| s.status).collect()
+        read_shop(lines, 1920.0, &known(), &wanted).seeds.iter().map(|s| s.status).collect()
     }
 
     #[test]
     fn reads_real_shop() {
-        let view = read_shop(&shop(), &known(), &known());
+        let view = read_shop(&shop(), 1920.0, &known(), &known());
         let got: Vec<Status> = view.seeds.iter().map(|s| s.status).collect();
         use Status::*;
         assert_eq!(got, vec![OutOfStock, OutOfStock, OutOfStock, OutOfStock, InStock(1)]);
@@ -323,7 +381,7 @@ mod tests {
         names.push("Bear Seed".into());
         let lines = vec![line("Bean Seed", 527.0, 539.0, 30.0), line("Stock: 1", 527.0, 582.0, 22.0)];
         let wanted = vec!["Bear Seed".to_string()];
-        let view = read_shop(&lines, &names, &wanted);
+        let view = read_shop(&lines, 1920.0, &names, &wanted);
         assert_eq!(view.seeds[0].status, Status::NotVisible);
     }
 
@@ -339,7 +397,7 @@ mod tests {
         let wanted: Vec<String> = ["Potato Seed", "Apple Seed", "Sweet Potato Seed", "Sugar Apple Seed"]
             .map(String::from)
             .to_vec();
-        let got: Vec<Status> = read_shop(&lines, &known, &wanted).seeds.iter().map(|s| s.status).collect();
+        let got: Vec<Status> = read_shop(&lines, 1920.0, &known, &wanted).seeds.iter().map(|s| s.status).collect();
         use Status::*;
         assert_eq!(got, vec![NotVisible, NotVisible, InStock(1), InStock(1)]);
     }
@@ -347,9 +405,83 @@ mod tests {
     #[test]
     fn shop_closed() {
         let lines = vec![line("Inventory", 100.0, 100.0, 30.0)];
-        let view = read_shop(&lines, &known(), &["Baobab Tree Seed".to_string()]);
+        let view = read_shop(&lines, 1920.0, &known(), &["Baobab Tree Seed".to_string()]);
         assert!(!view.shop_open);
         assert_eq!(view.seeds[0].status, Status::NotVisible);
+    }
+
+    /// The shop with Jacaranda selected (1336 wide), as in a real screenshot:
+    /// the list on the left, Jacaranda's panel on the right with `stock`.
+    fn shop_with_panel(stock: Option<(&str, f32, f32)>) -> Vec<Line> {
+        let mut lines = vec![
+            line("Until next deal: 1min 56sec", 362.0, 85.0, 20.0),
+            line("53.1M", 780.0, 82.0, 22.0),
+            line("Watermelon Seed", 250.0, 162.0, 30.0),
+            line("Out of Stock", 250.0, 205.0, 20.0),
+            line("Mango Seed", 250.0, 427.0, 30.0),
+            line("Out of Stock", 250.0, 470.0, 20.0),
+            line("Jacaranda Seed", 822.0, 175.0, 35.0),
+            line("Can be harvested once.", 766.0, 237.0, 24.0),
+            line("Send Gift", 1165.0, 238.0, 18.0),
+            line("46", 1120.0, 690.0, 30.0),
+        ];
+        if let Some((text, x, y)) = stock {
+            lines.push(line(text, x, y, 26.0));
+        }
+        lines
+    }
+
+    fn panel_view(lines: &[Line], wanted: &[&str]) -> Vec<(Status, bool)> {
+        let names: Vec<String> = ["Watermelon Seed", "Mango Seed", "Jacaranda Seed"].map(String::from).to_vec();
+        let wanted: Vec<String> = wanted.iter().map(|s| s.to_string()).collect();
+        read_shop(lines, 1336.0, &names, &wanted).seeds.iter().map(|s| (s.status, s.in_panel)).collect()
+    }
+
+    #[test]
+    fn panel_seed_in_stock() {
+        let lines = shop_with_panel(Some(("Stock: 1", 834.0, 628.0)));
+        assert_eq!(
+            panel_view(&lines, &["Jacaranda Seed", "Mango Seed"]),
+            vec![(Status::InStock(1), true), (Status::OutOfStock, false)]
+        );
+    }
+
+    #[test]
+    fn panel_seed_out_of_stock_button() {
+        // No "Stock:" line; the coin button turns gray and says "Out of Stock".
+        let lines = shop_with_panel(Some(("Out of Stock", 790.0, 696.0)));
+        assert_eq!(panel_view(&lines, &["Jacaranda Seed"]), vec![(Status::OutOfStock, true)]);
+    }
+
+    #[test]
+    fn panel_without_stock_line_is_unknown() {
+        assert_eq!(panel_view(&shop_with_panel(None), &["Jacaranda Seed"]), vec![(Status::Unknown, true)]);
+    }
+
+    #[test]
+    fn panel_seed_not_wanted_is_ignored() {
+        let lines = shop_with_panel(Some(("Stock: 1", 834.0, 628.0)));
+        assert_eq!(panel_view(&lines, &["Watermelon Seed"]), vec![(Status::OutOfStock, false)]);
+    }
+
+    #[test]
+    fn panel_title_is_not_a_list_row() {
+        // Only the panel's name, no "Stock" near it: must not borrow the
+        // description line or anything from the list.
+        let lines = vec![
+            line("Jacaranda Seed", 822.0, 175.0, 35.0),
+            line("Can be harvested once.", 766.0, 237.0, 24.0),
+            line("Mango Seed", 250.0, 160.0, 30.0),
+            line("Stock: 3", 250.0, 203.0, 20.0),
+        ];
+        assert_eq!(panel_view(&lines, &["Jacaranda Seed"]), vec![(Status::Unknown, true)]);
+    }
+
+    #[test]
+    fn list_wins_when_seed_is_in_both() {
+        let mut lines = shop_with_panel(None);
+        lines.extend([line("Jacaranda Seed", 250.0, 560.0, 30.0), line("Stock: 2", 250.0, 603.0, 20.0)]);
+        assert_eq!(panel_view(&lines, &["Jacaranda Seed"]), vec![(Status::InStock(2), false)]);
     }
 
     /// Guards seeds.json updates: every listed name must be recognised as

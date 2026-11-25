@@ -132,7 +132,7 @@ fn cmd_check(source: &str) -> Result<(), String> {
             rgba: img.into_raw(),
         };
         let lines = ocr::read(&frame)?;
-        let view = shop::read_shop(&lines, &known, &known);
+        let view = shop::read_shop(&lines, frame.width as f32, &known, &known);
         watcher::Check {
             time: capture::now_hms(),
             frame,
@@ -149,7 +149,8 @@ fn cmd_check(source: &str) -> Result<(), String> {
         println!("Next restock in: {d}");
     }
     for s in &check.view.seeds {
-        println!("  {:<22} {}", s.name, s.status.describe());
+        let place = if s.in_panel { " (right panel)" } else { "" };
+        println!("  {:<22} {}{place}", s.name, s.status.describe());
     }
     let (w, h) = (check.frame.width, check.frame.height);
     image::RgbaImage::from_raw(w, h, app::annotate(&check))
